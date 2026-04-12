@@ -9,12 +9,13 @@ export default function ChatMessage({ message }: ChatMessageProps) {
   const label = isUser ? "USER" : "ECOPROMPT";
 
   const isCacheHit = message.cache_hit;
+  const isSonnet = message.model_used === "sonnet";
   const badgeText = isCacheHit
     ? `Cache Hit · 0 LLM calls`
     : message.model_used === "haiku"
-      ? "Small model · Haiku"
-      : message.model_used === "sonnet"
-        ? "Large model · Sonnet"
+      ? "Small Model (Haiku)"
+      : isSonnet
+        ? "Large Model (Sonnet)"
         : null;
 
   return (
@@ -36,11 +37,15 @@ export default function ChatMessage({ message }: ChatMessageProps) {
               className={`inline-flex items-center gap-1.5 w-fit px-3 py-1 rounded-full text-xs font-medium ${
                 isCacheHit
                   ? "bg-amber-400/10 text-amber-400 border border-amber-400/30"
-                  : "bg-green/10 text-green border border-green-border"
+                  : isSonnet
+                    ? "bg-blue-400/10 text-blue-400 border border-blue-400/30"
+                    : "bg-green/10 text-green border border-green-border"
               }`}
             >
               {isCacheHit ? (
                 <span>&#9889;</span>
+              ) : isSonnet ? (
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
               ) : (
                 <span className="w-1.5 h-1.5 rounded-full bg-green" />
               )}
