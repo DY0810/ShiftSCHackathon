@@ -5,6 +5,8 @@ import { deduplicate } from "@/lib/dedup";
 import { storeEntry } from "@/lib/vectorStore";
 import { estimateEnergy, logMetric } from "@/lib/metrics";
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   const { prompt } = await request.json();
 

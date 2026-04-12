@@ -4,7 +4,11 @@ import {
 } from "@aws-sdk/client-bedrock-runtime";
 
 const client = new BedrockRuntimeClient({
-  region: process.env.AWS_REGION || "us-east-1",
+  region: (process.env.AWS_REGION || "us-east-1").trim(),
+  credentials: {
+    accessKeyId: (process.env.AWS_ACCESS_KEY_ID || "").trim(),
+    secretAccessKey: (process.env.AWS_SECRET_ACCESS_KEY || "").trim(),
+  },
 });
 
 const DEFAULT_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0";

@@ -2,7 +2,11 @@ import { DynamoDBClient, DescribeTableCommand, CreateTableCommand, type KeySchem
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 
 const rawClient = new DynamoDBClient({
-  region: process.env.AWS_REGION || "us-east-1",
+  region: (process.env.AWS_REGION || "us-east-1").trim(),
+  credentials: {
+    accessKeyId: (process.env.AWS_ACCESS_KEY_ID || "").trim(),
+    secretAccessKey: (process.env.AWS_SECRET_ACCESS_KEY || "").trim(),
+  },
 });
 
 export const docClient = DynamoDBDocumentClient.from(rawClient);
