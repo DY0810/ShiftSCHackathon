@@ -1,4 +1,7 @@
 import type { Message } from "@/lib/types";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 
 type ChatMessageProps = {
   message: Message;
@@ -27,9 +30,9 @@ export default function ChatMessage({ message }: ChatMessageProps) {
       >
         {label}
       </span>
-      <p className="text-text-primary text-sm leading-relaxed">
-        {message.content}
-      </p>
+      <div className="text-text-primary text-sm leading-relaxed prose prose-invert prose-sm max-w-none prose-pre:bg-[#1e1e1e] prose-pre:border prose-pre:border-border-standard prose-pre:rounded-md prose-code:text-green prose-headings:text-text-primary prose-headings:font-semibold prose-p:my-1.5 prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0.5 prose-pre:my-2">
+        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{message.content}</ReactMarkdown>
+      </div>
       {(badgeText || message.response_time_ms) && (
         <div className="flex items-center gap-2 mt-1">
           {badgeText && (
