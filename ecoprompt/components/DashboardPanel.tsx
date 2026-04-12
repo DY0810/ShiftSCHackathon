@@ -3,13 +3,14 @@ import ModelDistribution from "./ModelDistribution";
 import EnergyChart from "./EnergyChart";
 import HeadlineStat from "./HeadlineStat";
 import QueryLog from "./QueryLog";
-import type { DashboardMetrics } from "@/lib/types";
+import type { DashboardMetrics, Message } from "@/lib/types";
 
 type DashboardPanelProps = {
   metrics: DashboardMetrics | null;
+  messages?: Message[];
 };
 
-export default function DashboardPanel({ metrics }: DashboardPanelProps) {
+export default function DashboardPanel({ metrics, messages = [] }: DashboardPanelProps) {
   const m = metrics;
   const totalQueries = m?.total_queries ?? 0;
   const cacheHits = m?.cache_hits ?? 0;
@@ -91,7 +92,7 @@ export default function DashboardPanel({ metrics }: DashboardPanelProps) {
 
         {/* Query Log */}
         <div className="bg-surface rounded-lg border border-border-standard p-4">
-          <QueryLog />
+          <QueryLog messages={messages} />
         </div>
       </div>
     </div>

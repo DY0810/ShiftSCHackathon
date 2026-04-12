@@ -36,8 +36,7 @@ export default function LandingPage() {
         {/* Subtitle */}
         <p className="text-text-secondary text-base leading-relaxed max-w-xl">
           EcoPrompt reduces the environmental cost of AI through semantic
-          deduplication, model right-sizing, and real-time cost visibility — not
-          guilt.
+          deduplication, model right-sizing, and real-time cost visibility.
         </p>
 
         {/* CTA Buttons */}
@@ -48,12 +47,6 @@ export default function LandingPage() {
           >
             See the demo
           </Link>
-          <a
-            href="#architecture"
-            className="flex items-center justify-center h-12 px-8 rounded-full bg-near-black text-text-primary border border-border-standard text-sm font-medium transition-colors hover:border-border-prominent"
-          >
-            Read the architecture
-          </a>
         </div>
       </div>
 
@@ -61,7 +54,7 @@ export default function LandingPage() {
       <div className="w-full max-w-4xl border-t border-border-subtle pt-8 pb-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
           <StatItem value="~10x" label="energy difference between model tiers" />
-          <StatItem value="0.92" label="cosine similarity threshold" />
+          <StatItem value="0.65" label="cosine similarity threshold" />
           <StatItem value="300k" label="LLM calls avoided per 1M queries at 30% hit rate" />
           <StatItem value="0 kg" label={"CO\u2082 from a cache-hit response"} />
         </div>
