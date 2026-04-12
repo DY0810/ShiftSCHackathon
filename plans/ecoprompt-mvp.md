@@ -471,11 +471,11 @@ Add a prompt complexity classifier that routes simple prompts to Claude Haiku (s
 
 ### Acceptance Criteria
 
-- [ ] "What is photosynthesis?" → green badge (Small Model / Haiku)
-- [ ] "Write a Python function to parse CSV and compute rolling averages" → blue badge (Large Model / Sonnet)
-- [ ] Simple prompts get noticeably faster responses than complex ones
-- [ ] Cache hits still work (return cached response regardless of original model)
-- [ ] `npm run build` succeeds
+- [x] "What is photosynthesis?" → green badge (Small Model / Haiku)
+- [x] "Write a Python function to parse CSV and compute rolling averages" → blue badge (Large Model / Sonnet)
+- [x] Simple prompts get noticeably faster responses than complex ones
+- [x] Cache hits still work (return cached response regardless of original model)
+- [x] `npm run build` succeeds
 
 ### Verification Commands
 
