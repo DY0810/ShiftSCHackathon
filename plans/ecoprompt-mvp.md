@@ -15,11 +15,14 @@
 | Layer | Choice | Why |
 |---|---|---|
 | Frontend | Next.js 14+ App Router + TypeScript + Tailwind CSS | Fast, full-stack, SSR |
-| LLM | Amazon Bedrock (Claude Haiku + Sonnet) | AWS requirement, multi-model |
+| LLM | Amazon Bedrock (Claude Haiku + Sonnet) | AWS-sponsored hackathon, multi-model |
 | Embeddings | Amazon Titan Embeddings v2 (via Bedrock) | AWS-native, 1024-dim vectors |
-| Vector Store | Supabase pgvector | Fast setup, cosine similarity built-in |
-| Metrics DB | Supabase Postgres (same instance) | Single data layer |
+| Vector Cache | Amazon DynamoDB | Stores query embeddings + responses. Cosine similarity computed in-app (instant at hackathon scale <100 queries) |
+| Metrics DB | Amazon DynamoDB (same table or separate) | Per-query energy/CO2 logs |
 | Hosting | Vercel | Zero-config Next.js deploys |
+
+**AWS Services Used:** Bedrock (LLM + Embeddings), DynamoDB (cache + metrics) — all-AWS backend.
+**Why not OpenSearch Serverless for vectors?** Setup takes ~10 min to provision, SDK is verbose. DynamoDB + in-app cosine similarity is faster to build and works perfectly for demo scale. In production you'd swap to OpenSearch.
 
 ---
 
@@ -40,7 +43,7 @@
 
 ### Context Brief
 
-Create a Next.js 14 App Router project with TypeScript and Tailwind CSS. Build the split-screen layout: ChatPanel on the left (~55% width), DashboardPanel on the right (~45% width). All data is hardcoded/placeholder — no API calls, no Bedrock, no Supabase. The app must render and look like the spec's UI layout diagram.
+Create a Next.js 14 App Router project with TypeScript and Tailwind CSS. Build the split-screen layout: ChatPanel on the left (~55% width), DashboardPanel on the right (~45% width). All data is hardcoded/placeholder — no API calls, no Bedrock, no DynamoDB. The app must render and look like the spec's UI layout diagram.
 
 ### Files to Create
 
@@ -106,8 +109,8 @@ Create a Next.js 14 App Router project with TypeScript and Tailwind CSS. Build t
 6. Build `components/ChatPanel.tsx` — scrollable message list + fixed input bar at bottom. Hardcode 3 messages: one with green badge, one with cache hit badge, one with blue badge. Input is non-functional (just styled).
 7. Build `components/MetricsCounter.tsx` — card with label, large number, optional subtitle.
 8. Build `components/DashboardPanel.tsx` — grid of MetricsCounter cards (Total Queries: 4, Cache Hit Rate: 50%, Energy Saved: 0.01 kWh, CO2 Avoided: 0.004 kg). Below the cards, placeholder boxes labeled "Energy Saved Over Time" and "Query Distribution" where charts will go later.
-9. Add footer bar: "Built with Amazon Bedrock · Titan Embeddings · Supabase pgvector".
-10. Create `.env.local.example` with placeholder keys: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+9. Add footer bar: "Built with Amazon Bedrock · Titan Embeddings · Amazon DynamoDB".
+10. Create `.env.local.example` with placeholder keys: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`.
 
 ### Acceptance Criteria
 
@@ -206,7 +209,30 @@ AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
 AWS_REGION=us-east-1
 ```
-These credentials must have `bedrock:InvokeModel` permission for Claude models in the specified region.
+These credentials must have the following IAM permissions (covers all phases):
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "bedrock:InvokeModel",
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:CreateTable",
+        "dynamodb:DescribeTable",
+        "dynamodb:PutItem",
+        "dynamodb:Scan",
+        "dynamodb:TagResource"
+      ],
+      "Resource": "arn:aws:dynamodb:*:*:table/ecoprompt-*"
+    }
+  ]
+}
+```
 
 ---
 
@@ -218,94 +244,72 @@ These credentials must have `bedrock:InvokeModel` permission for Claude models i
 
 ### Context Brief
 
-Add semantic deduplication — the primary differentiator. When a user sends a prompt: (1) generate an embedding via Titan Embeddings, (2) search Supabase pgvector for similar past queries using cosine similarity, (3) if similarity >= 0.92, return the cached response (cache hit — zero LLM call), (4) if no match, call Bedrock LLM, then store the new embedding + response in the vector store. The ChatPanel should show a yellow "Cache Hit" badge for cached responses.
+Add semantic deduplication — the primary differentiator. When a user sends a prompt: (1) generate an embedding via Titan Embeddings on Bedrock, (2) scan the DynamoDB `query_cache` table and compute cosine similarity in-app against all stored embeddings, (3) if similarity >= 0.92, return the cached response (cache hit — zero LLM call), (4) if no match, call Bedrock LLM, then store the new embedding + response in DynamoDB. The ChatPanel should show a yellow "Cache Hit" badge for cached responses.
+
+**Why in-app cosine similarity instead of a vector database?** At hackathon scale (<100 queries), scanning all embeddings from DynamoDB and computing cosine similarity in Node.js takes <10ms total. This eliminates the need for pgvector/OpenSearch and keeps the stack all-AWS. In production you'd swap to OpenSearch Serverless.
 
 ### Files to Create/Modify
 
 | File | Action | Purpose |
 |---|---|---|
 | `lib/bedrock.ts` | Modify | Add `generateEmbedding(text: string): Promise<number[]>` using Titan Embeddings v2 |
-| `lib/vectorStore.ts` | Create | Supabase client. Functions: `searchSimilar(embedding, threshold)` returns `{ match, similarity, cached_response }` or null. `storeEntry(prompt, embedding, response, model_used)` inserts new row |
+| `lib/dynamodb.ts` | Create | Shared DynamoDB Document client + `ensureTable()` helper (reused by vectorStore.ts and metrics.ts) |
+| `lib/vectorStore.ts` | Create | DynamoDB-backed cache. Functions: `searchSimilar(embedding, threshold)` scans table, computes cosine similarity in-app, returns best match or null. `storeEntry(prompt, embedding, response, model_used)` puts item to DynamoDB |
 | `lib/dedup.ts` | Create | Orchestrates: `embed → search → hit/miss` logic. Exports `deduplicate(prompt): Promise<{ hit: boolean, response?: string, similarity?: number }>` |
 | `app/api/query/route.ts` | Modify | Integrate dedup: call `deduplicate()` first. If hit, return cached response with `cache_hit: true`. If miss, call Bedrock, then store via vectorStore |
-| `package.json` | Modify | Add `@supabase/supabase-js` |
-| `.env.local.example` | Modify | Add Supabase vars |
+| `package.json` | Modify | Add `@aws-sdk/client-dynamodb` and `@aws-sdk/lib-dynamodb` |
 
 ### Task List
 
-1. **⚠️ PREREQUISITE — Supabase setup** (must be done manually or via Supabase MCP BEFORE any code in this phase — without this, all queries will fail):
-   - Enable the `vector` extension in Supabase: `CREATE EXTENSION IF NOT EXISTS vector;`
-   - Create the table:
-     ```sql
-     CREATE TABLE query_cache (
-       id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-       prompt TEXT NOT NULL,
-       embedding VECTOR(1024) NOT NULL,
-       response TEXT NOT NULL,
-       model_used TEXT NOT NULL,
-       created_at TIMESTAMPTZ DEFAULT NOW()
-     );
-     CREATE INDEX ON query_cache USING hnsw (embedding vector_cosine_ops);
-     ```
-   - Note: Titan Embeddings v2 produces 1024-dimensional vectors.
+1. `npm install @aws-sdk/client-dynamodb @aws-sdk/lib-dynamodb`
 
-2. `npm install @supabase/supabase-js`
-
-3. Modify `lib/bedrock.ts` — add embedding function:
+2. Modify `lib/bedrock.ts` — add embedding function:
    - `async function generateEmbedding(text: string): Promise<number[]>`
    - Model ID: `amazon.titan-embed-text-v2:0`
    - Request body: `{ inputText: text, dimensions: 1024, normalize: true }`
    - Parse response, return the `embedding` array
 
-4. Create `lib/vectorStore.ts`:
-   - Initialize Supabase client from env vars (`NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`)
-   - `searchSimilar(embedding: number[], threshold: number = 0.92)`:
-     - Use Supabase RPC to call a similarity search function, OR use raw SQL via `.rpc()`:
-       ```sql
-       SELECT id, prompt, response, model_used,
-              1 - (embedding <=> $1::vector) AS similarity
-       FROM query_cache
-       ORDER BY embedding <=> $1::vector
-       LIMIT 1;
-       ```
-     - If top result's similarity >= threshold, return `{ hit: true, response, similarity }`
-     - Otherwise return `{ hit: false }`
-   - `storeEntry(prompt, embedding, response, model_used)`:
-     - Insert row into `query_cache`
-
-   - **Important:** Create a Supabase RPC function for the similarity search:
-     ```sql
-     CREATE OR REPLACE FUNCTION match_queries(
-       query_embedding VECTOR(1024),
-       similarity_threshold FLOAT DEFAULT 0.92,
-       match_count INT DEFAULT 1
-     )
-     RETURNS TABLE (
-       id UUID,
-       prompt TEXT,
-       response TEXT,
-       model_used TEXT,
-       similarity FLOAT
-     )
-     LANGUAGE plpgsql
-     AS $$
-     BEGIN
-       RETURN QUERY
-       SELECT
-         qc.id,
-         qc.prompt,
-         qc.response,
-         qc.model_used,
-         1 - (qc.embedding <=> query_embedding) AS similarity
-       FROM query_cache qc
-       WHERE 1 - (qc.embedding <=> query_embedding) >= similarity_threshold
-       ORDER BY qc.embedding <=> query_embedding
-       LIMIT match_count;
-     END;
-     $$;
+3. Create `lib/dynamodb.ts` — **shared DynamoDB client** (reused by vectorStore.ts and metrics.ts):
+   - Initialize DynamoDB Document client from `@aws-sdk/lib-dynamodb` using env `AWS_REGION`
+   - Export the client instance
+   - Export **`ensureTable(tableName, keySchema)` helper**:
+     ```typescript
+     async function ensureTable(tableName: string, keySchema: KeySchemaElement[]): Promise<void> {
+       // Try DescribeTable; if ResourceNotFoundException:
+       //   Try CreateTable with PAY_PER_REQUEST billing
+       //   Catch ResourceInUseException (race condition — another request created it first) — treat as success
+       //   Poll DescribeTable until status is ACTIVE
+     }
      ```
+   - This handles concurrent requests safely.
 
-5. Create `lib/dedup.ts`:
+4. Create `lib/vectorStore.ts`:
+   - Import shared client and `ensureTable` from `lib/dynamodb.ts`
+   - Table name constant: `QUERY_CACHE_TABLE = 'ecoprompt-query-cache'`
+   - Call `ensureTable(QUERY_CACHE_TABLE, [{AttributeName: 'id', KeyType: 'HASH'}])` before first operation
+   - **Cosine similarity function** (pure math, no dependencies):
+     ```typescript
+     function cosineSimilarity(a: number[], b: number[]): number {
+       let dot = 0, magA = 0, magB = 0;
+       for (let i = 0; i < a.length; i++) {
+         dot += a[i] * b[i];
+         magA += a[i] * a[i];
+         magB += b[i] * b[i];
+       }
+       return dot / (Math.sqrt(magA) * Math.sqrt(magB));
+     }
+     ```
+   - `searchSimilar(embedding: number[], threshold: number = 0.92)`:
+     - `Scan` the `ecoprompt-query-cache` table (all items)
+     - For each item, compute `cosineSimilarity(embedding, item.embedding)`
+     - Find the item with the highest similarity
+     - If highest similarity >= threshold, return `{ hit: true, response: item.response, similarity }`
+     - Otherwise return `{ hit: false }`
+     - **Performance note:** At <100 items with 1024-dim vectors, this scan + compute takes <10ms
+   - `storeEntry(prompt, embedding, response, model_used)`:
+     - `PutItem` to DynamoDB: `{ id: uuid(), prompt, embedding (stored as List of Numbers), response, model_used, created_at: ISO timestamp }`
+
+4. Create `lib/dedup.ts`:
    - Import `generateEmbedding` from bedrock, `searchSimilar`, `storeEntry` from vectorStore
    - Export `async function deduplicate(prompt: string)`:
      - Generate embedding for prompt
@@ -313,13 +317,13 @@ Add semantic deduplication — the primary differentiator. When a user sends a p
      - Return `{ hit: boolean, response?: string, similarity?: number, embedding: number[] }`
    - The embedding is returned so the caller can store it after a cache miss without re-computing
 
-6. Modify `app/api/query/route.ts`:
+5. Modify `app/api/query/route.ts`:
    - Call `deduplicate(prompt)` first
    - If hit: return `{ answer: cached_response, cache_hit: true, model_used: "cache", energy_kwh: 0, response_time_ms }`
    - If miss: call `invokeModel()`, then call `storeEntry(prompt, embedding, response, model_used)`, return with `cache_hit: false`
    - Cache hits should be noticeably faster (no LLM latency)
 
-7. Update `components/ChatMessage.tsx` — ensure "cache_hit" badge renders as yellow with lightning bolt icon.
+6. Update `components/ChatMessage.tsx` — ensure "cache_hit" badge renders as yellow with lightning bolt icon.
 
 ### Acceptance Criteria
 
@@ -327,7 +331,7 @@ Add semantic deduplication — the primary differentiator. When a user sends a p
 - [ ] Second similar query ("Explain photosynthesis to me") returns cached response with "Cache Hit" badge
 - [ ] Cache hit response is visibly faster (no LLM call latency)
 - [ ] Different query ("What is gravity?") is a cache miss, calls Bedrock
-- [ ] Supabase `query_cache` table has rows after queries
+- [ ] DynamoDB `ecoprompt-query-cache` table has items after queries
 - [ ] `npm run build` succeeds
 
 ### Verification Commands
@@ -343,12 +347,20 @@ cd /Users/dyl/shiftH/ecoprompt && npm run build
 
 ### Environment Setup Required
 
-Add to `.env.local`:
+The same `.env.local` AWS credentials from Phase 2 are used. The IAM user needs these additional permissions:
+```json
+{
+  "Effect": "Allow",
+  "Action": [
+    "dynamodb:CreateTable",
+    "dynamodb:DescribeTable",
+    "dynamodb:PutItem",
+    "dynamodb:Scan"
+  ],
+  "Resource": "arn:aws:dynamodb:*:*:table/ecoprompt-*"
+}
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
-```
-Run the SQL setup (table + function) in Supabase SQL Editor before testing.
+The DynamoDB table is auto-created on first use — no manual setup needed.
 
 ---
 
@@ -432,7 +444,7 @@ cd /Users/dyl/shiftH/ecoprompt && npm run build
 
 ### Context Brief
 
-Add per-query metric logging to Supabase and make the dashboard display real, live data. Every query logs: timestamp, cache_hit, model_used, estimated energy, estimated CO2. The dashboard reads metrics and updates after each query without page reload.
+Add per-query metric logging to DynamoDB and make the dashboard display real, live data. Every query logs: timestamp, cache_hit, model_used, estimated energy, estimated CO2. The dashboard reads metrics and updates after each query without page reload.
 
 ### Files to Create/Modify
 
@@ -447,21 +459,15 @@ Add per-query metric logging to Supabase and make the dashboard display real, li
 
 ### Task List
 
-1. **Supabase table** (run in SQL editor):
-   ```sql
-   CREATE TABLE query_metrics (
-     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-     prompt_preview TEXT,
-     cache_hit BOOLEAN NOT NULL,
-     model_used TEXT NOT NULL,
-     energy_kwh FLOAT NOT NULL,
-     co2_kg FLOAT NOT NULL,
-     response_time_ms INT,
-     created_at TIMESTAMPTZ DEFAULT NOW()
-   );
-   ```
+1. **DynamoDB table** — auto-created on first use (same pattern as Phase 3):
+   - Table name: `ecoprompt-query-metrics`
+   - PK: `id` (S)
+   - On-demand billing (PAY_PER_REQUEST)
+   - Items: `{ id, prompt_preview, cache_hit (BOOL), model_used (S), energy_kwh (N), co2_kg (N), response_time_ms (N), created_at (S) }`
 
 2. Create `lib/metrics.ts`:
+   - Import shared DynamoDB client and `ensureTable` from `lib/dynamodb.ts` (created in Phase 3)
+   - Call `ensureTable('ecoprompt-query-metrics', [{AttributeName: 'id', KeyType: 'HASH'}])` before first operation
    - Energy constants:
      ```typescript
      export const ENERGY = {
@@ -477,9 +483,9 @@ Add per-query metric logging to Supabase and make the dashboard display real, li
      - Sonnet: `ENERGY.large_model_kwh`
      - CO2 = energy * grid_emission_factor
      - Also compute `energy_saved`: difference between what would have been used (large model) and what was used
-   - `async function logMetric(data: MetricEntry): Promise<void>` — insert into `query_metrics`
+   - `async function logMetric(data: MetricEntry): Promise<void>` — PutItem to DynamoDB `ecoprompt-query-metrics` table
    - `async function getAggregatedMetrics(): Promise<DashboardMetrics>`:
-     - Query `query_metrics` table
+     - Scan `ecoprompt-query-metrics` table
      - Return: `{ total_queries, cache_hits, cache_hit_rate, small_model_count, large_model_count, total_energy_kwh, total_co2_kg, energy_saved_kwh, co2_saved_kg, timeline: [{timestamp, cumulative_energy_saved}] }`
      - `energy_saved` = sum of (large_model_energy - actual_energy) for each query
 
@@ -511,7 +517,7 @@ Add per-query metric logging to Supabase and make the dashboard display real, li
 
 ### Acceptance Criteria
 
-- [ ] Each query logs a row to `query_metrics` table
+- [ ] Each query logs an item to DynamoDB `ecoprompt-query-metrics` table
 - [ ] Dashboard counters update after each query (no page reload)
 - [ ] Cache hits show lower energy than model calls
 - [ ] Total queries counter matches actual query count
@@ -524,7 +530,7 @@ Add per-query metric logging to Supabase and make the dashboard display real, li
 ```bash
 cd /Users/dyl/shiftH/ecoprompt && npm run build
 # Manual: send 4 queries from demo script, verify dashboard numbers match expected values
-# Check Supabase query_metrics table has 4 rows
+# Check DynamoDB ecoprompt-query-metrics table has 4 items
 ```
 
 ---
@@ -668,9 +674,10 @@ All phases are serial — each depends on the previous. No parallel execution op
 
 | Risk | Mitigation |
 |---|---|
-| AWS credentials not configured | Phase 2 blocks until `.env.local` has valid Bedrock creds. Confirm before starting |
-| Supabase pgvector extension not enabled | Phase 3 blocks until SQL setup is run. Provide exact SQL commands |
+| AWS credentials not configured | Phase 2 blocks until `.env.local` has valid Bedrock + DynamoDB creds. Confirm before starting |
+| IAM permissions too narrow | IAM user needs `bedrock:InvokeModel`, `dynamodb:CreateTable`, `dynamodb:DescribeTable`, `dynamodb:PutItem`, `dynamodb:Scan`. Use the policy in Phase 3 |
 | Titan Embeddings dimension mismatch | Spec says 1024 dims. Verify in Phase 3 by logging first embedding length |
+| DynamoDB scan latency at scale | At <100 items, scan is <10ms. For hackathon demo this is fine. In production, swap to OpenSearch Serverless |
 | Cosine similarity threshold too strict/loose | Default 0.92 from spec. Tune in Phase 6 if needed. Log similarity scores to debug |
 | Recharts SSR issues in Next.js | Use `"use client"` directive on all chart components. Dynamic import with `ssr: false` if needed |
 | Bedrock model ID changes | Pin exact model IDs in `classifier.ts` constants. Update if API errors |
@@ -683,5 +690,6 @@ All phases are serial — each depends on the previous. No parallel execution op
 - **Hackathon speed**: Skip error handling, skip tests, skip loading states beyond basics. Optimize for "it works in the demo."
 - **All work in `ecoprompt/` subdirectory**: The repo root has spec files; the Next.js app lives in `ecoprompt/`.
 - **Commit after each phase**: Push to `main` on the remote after each phase passes verification.
-- **Supabase setup**: Phases 3 and 5 require SQL to be run in Supabase. The executor should do this via the Supabase MCP or SQL editor.
-- **`.env.local`**: Never commit this file. Use `.env.local.example` as a template.
+- **All-AWS backend**: Bedrock (LLM + embeddings) + DynamoDB (cache + metrics). No Supabase, no external DB. DynamoDB tables auto-create on first use — no manual setup between phases.
+- **IAM permissions**: The AWS credentials need `bedrock:InvokeModel` + DynamoDB CRUD on `ecoprompt-*` tables. A single IAM policy covers all phases.
+- **`.env.local`**: Never commit this file. Only 3 vars needed: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`.
