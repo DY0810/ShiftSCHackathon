@@ -353,7 +353,7 @@ Add semantic deduplication — the primary differentiator. When a user sends a p
        return dot / (Math.sqrt(magA) * Math.sqrt(magB));
      }
      ```
-   - `searchSimilar(embedding: number[], threshold: number = 0.80)` (lowered from 0.92 — Titan v2 produces lower similarity for short paraphrases):
+   - `searchSimilar(embedding: number[], threshold: number = 0.65)` (lowered from 0.92 — Titan v2 normalized embeddings produce cosine similarities of 0.68–0.76 for paraphrases vs <0.09 for different topics; 0.65 sits safely in the gap):
      - `Scan` the `ecoprompt-query-cache` table (all items)
      - For each item, compute `cosineSimilarity(embedding, item.embedding)`
      - Find the item with the highest similarity
