@@ -28,7 +28,7 @@ function cosineSimilarity(a: number[], b: number[]): number {
 
 export async function searchSimilar(
   embedding: number[],
-  threshold: number = 0.80
+  threshold: number = 0.65
 ): Promise<{ hit: true; response: string; similarity: number } | { hit: false }> {
   await ensureCacheTable();
 
