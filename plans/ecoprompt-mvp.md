@@ -26,6 +26,20 @@
 
 ---
 
+## Design System
+
+Three reference files in `design/` control the visual design. Read `design/README.md` for full guidance. Summary:
+
+| File | Use For | Key Extractions |
+|---|---|---|
+| `design/colors.md` | Colors & theme | Dark mode: bg `#171717`, text `#fafafa`, green accent `#3ecf8e`, border hierarchy `#242424`→`#2e2e2e`→`#363636`. No shadows — depth via borders |
+| `design/fonts.md` | Typography | Geist Sans + Geist Mono. Display 48px/600/-2.4px tracking. Body 16px/400. Three weights: 400, 500, 600 |
+| `design/layout.md` | Layout & components | 8px base spacing. Cards 4-6px radius. Buttons 6px radius. Pills 9999px. Responsive stack below 768px |
+
+**Conflict rule:** colors.md wins for theme, fonts.md wins for typography, layout.md wins for spacing/structure.
+
+---
+
 ## Invariants (Verified After Every Phase)
 
 1. `npm run build` succeeds with zero errors
@@ -43,7 +57,14 @@
 
 ### Context Brief
 
-Create a Next.js 14 App Router project with TypeScript and Tailwind CSS. Build the split-screen layout: ChatPanel on the left (~55% width), DashboardPanel on the right (~45% width). All data is hardcoded/placeholder — no API calls, no Bedrock, no DynamoDB. The app must render and look like the spec's UI layout diagram.
+Create a Next.js 14 App Router project with TypeScript and Tailwind CSS. Build the split-screen layout: ChatPanel on the left (~55% width), DashboardPanel on the right (~45% width). All data is hardcoded/placeholder — no API calls, no Bedrock, no DynamoDB.
+
+**Design system:** Read `design/README.md` first, then extract from each design file:
+- **Colors/theme** from `design/colors.md` — dark mode, Supabase-inspired color palette, border depth system
+- **Typography** from `design/fonts.md` — Geist Sans + Geist Mono font system, weight/size/spacing rules
+- **Layout/components** from `design/layout.md` — spacing, border-radius, card/button patterns, responsive behavior
+
+The app should match the spec's UI layout diagram (`EcoPrompt_Project_Spec.md` Section "UI Layout") while using the design system from `design/`.
 
 ### Files to Create
 
@@ -68,8 +89,8 @@ Create a Next.js 14 App Router project with TypeScript and Tailwind CSS. Build t
 ### Task List
 
 1. Run `npx create-next-app@latest ecoprompt --typescript --tailwind --app --src-dir=false --import-alias="@/*" --use-npm` inside `/Users/dyl/shiftH/` — then move contents up or work inside the `ecoprompt/` subdirectory. **Decision: work inside `ecoprompt/` subdirectory** to keep spec files at repo root.
-2. Set up dark theme in `tailwind.config.ts` (dark background `#0a0a0a`, card bg `#1a1a2e`, accent green `#00d4aa`, accent blue `#3b82f6`).
-3. Build `app/layout.tsx` — full viewport, dark bg, Inter font, title "EcoPrompt".
+2. Set up Tailwind theme in `tailwind.config.ts` — extract all color tokens from `design/colors.md`: page bg `#171717`, card surfaces, brand green `#3ecf8e`, border hierarchy (`#242424`, `#2e2e2e`, `#363636`), text colors (`#fafafa`, `#b4b4b4`, `#898989`). Add Geist font family from `design/fonts.md`.
+3. Build `app/layout.tsx` — full viewport, dark bg `#171717`, Geist Sans font (load via `next/font/google` or CDN), title "EcoPrompt".
 4. Build `app/page.tsx` — flex row, left panel 55% width, right panel 45% width, responsive (stack vertically on mobile).
 5. Create `lib/types.ts` — shared types used across all phases:
    ```typescript
@@ -105,7 +126,7 @@ Create a Next.js 14 App Router project with TypeScript and Tailwind CSS. Build t
      response_time_ms: number;
    };
    ```
-6. Build `components/ChatMessage.tsx` — message bubble with: role (user/assistant), content text, optional badge (`cache_hit` | `small_model` | `large_model`), optional response time in ms. Badge renders as colored pill: yellow/lightning for cache hit, green for small model, blue for large model.
+6. Build `components/ChatMessage.tsx` — message bubble with: role (user/assistant), content text, optional badge (`cache_hit` | `small_model` | `large_model`), optional response time in ms. Badge renders as colored pill (9999px radius per `design/layout.md`): yellow/lightning for cache hit, green `#3ecf8e` for small model, blue for large model. Card styling per `design/colors.md` depth system — borders not shadows.
 6. Build `components/ChatPanel.tsx` — scrollable message list + fixed input bar at bottom. Hardcode 3 messages: one with green badge, one with cache hit badge, one with blue badge. Input is non-functional (just styled).
 7. Build `components/MetricsCounter.tsx` — card with label, large number, optional subtitle.
 8. Build `components/DashboardPanel.tsx` — grid of MetricsCounter cards (Total Queries: 4, Cache Hit Rate: 50%, Energy Saved: 0.01 kWh, CO2 Avoided: 0.004 kg). Below the cards, placeholder boxes labeled "Energy Saved Over Time" and "Query Distribution" where charts will go later.
