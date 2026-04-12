@@ -15,7 +15,7 @@
 | Layer | Choice | Why |
 |---|---|---|
 | Frontend | Next.js 14+ App Router + TypeScript + Tailwind CSS | Fast, full-stack, SSR |
-| LLM | Amazon Bedrock (Claude Haiku + Sonnet) | AWS-sponsored hackathon, multi-model |
+| LLM | Amazon Bedrock (Claude Haiku 4.5 + Claude Sonnet 4.5) | AWS-sponsored hackathon, multi-model |
 | Embeddings | Amazon Titan Embeddings v2 (via Bedrock) | AWS-native, 1024-dim vectors |
 | Vector Cache | Amazon DynamoDB | Stores query embeddings + responses. Cosine similarity computed in-app (instant at hackathon scale <100 queries) |
 | Metrics DB | Amazon DynamoDB (same table or separate) | Per-query energy/CO2 logs |
@@ -218,7 +218,7 @@ Wire up Amazon Bedrock for LLM calls. Create a `/api/query` route that accepts a
    - Export `async function invokeModel(prompt: string, modelId: string): Promise<string>`
    - For Claude models, format the request body as: `{ anthropic_version: "bedrock-2023-05-31", max_tokens: 1024, messages: [{ role: "user", content: prompt }] }`
    - Parse response body, extract `content[0].text`
-   - Default model ID: `anthropic.claude-3-haiku-20240307-v1:0` (will be parameterized in Phase 4)
+   - Default model ID: `us.anthropic.claude-haiku-4-5-20251001-v1:0` (will be parameterized in Phase 4)
 3. Create `app/api/query/route.ts`:
    - POST handler accepts JSON body `{ prompt: string }`
    - Records start time
@@ -353,7 +353,7 @@ Add semantic deduplication — the primary differentiator. When a user sends a p
        return dot / (Math.sqrt(magA) * Math.sqrt(magB));
      }
      ```
-   - `searchSimilar(embedding: number[], threshold: number = 0.92)`:
+   - `searchSimilar(embedding: number[], threshold: number = 0.80)` (lowered from 0.92 — Titan v2 produces lower similarity for short paraphrases):
      - `Scan` the `ecoprompt-query-cache` table (all items)
      - For each item, compute `cosineSimilarity(embedding, item.embedding)`
      - Find the item with the highest similarity
@@ -450,8 +450,8 @@ Add a prompt complexity classifier that routes simple prompts to Claude Haiku (s
    - Export the function and also export `MODEL_IDS` constant:
      ```typescript
      export const MODEL_IDS = {
-       simple: 'anthropic.claude-3-haiku-20240307-v1:0',
-       complex: 'anthropic.claude-3-5-sonnet-20241022-v1:0',
+       simple: 'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+       complex: 'us.anthropic.claude-sonnet-4-5-20250929-v1:0',
      } as const;
      ```
 

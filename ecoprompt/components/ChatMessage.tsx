@@ -8,8 +8,9 @@ export default function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user";
   const label = isUser ? "USER" : "ECOPROMPT";
 
-  const badgeText = message.cache_hit
-    ? `Cache hit · 0 LLM calls`
+  const isCacheHit = message.cache_hit;
+  const badgeText = isCacheHit
+    ? `Cache Hit · 0 LLM calls`
     : message.model_used === "haiku"
       ? "Small model · Haiku"
       : message.model_used === "sonnet"
@@ -28,11 +29,30 @@ export default function ChatMessage({ message }: ChatMessageProps) {
       <p className="text-text-primary text-sm leading-relaxed">
         {message.content}
       </p>
-      {badgeText && (
-        <span className="inline-flex items-center gap-1.5 mt-1 w-fit px-3 py-1 rounded-full text-xs font-medium bg-green/10 text-green border border-green-border">
-          <span className="w-1.5 h-1.5 rounded-full bg-green" />
-          {badgeText}
-        </span>
+      {(badgeText || message.response_time_ms) && (
+        <div className="flex items-center gap-2 mt-1">
+          {badgeText && (
+            <span
+              className={`inline-flex items-center gap-1.5 w-fit px-3 py-1 rounded-full text-xs font-medium ${
+                isCacheHit
+                  ? "bg-amber-400/10 text-amber-400 border border-amber-400/30"
+                  : "bg-green/10 text-green border border-green-border"
+              }`}
+            >
+              {isCacheHit ? (
+                <span>&#9889;</span>
+              ) : (
+                <span className="w-1.5 h-1.5 rounded-full bg-green" />
+              )}
+              {badgeText}
+            </span>
+          )}
+          {message.response_time_ms && (
+            <span className="text-xs text-text-secondary">
+              {(message.response_time_ms / 1000).toFixed(1)}s
+            </span>
+          )}
+        </div>
       )}
     </div>
   );
