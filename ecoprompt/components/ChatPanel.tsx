@@ -1,37 +1,64 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
 import type { Message } from "@/lib/types";
 import ChatMessage from "./ChatMessage";
 
-const sampleMessages: Message[] = [
-  {
-    role: "user",
-    content: "What is photosynthesis?",
-  },
-  {
-    role: "assistant",
-    content:
-      "Photosynthesis is the process by which plants convert sunlight, water, and CO\u2082 into glucose and oxygen using chlorophyll.",
-    model_used: "haiku",
-    cache_hit: false,
-  },
-  {
-    role: "user",
-    content: "Explain photosynthesis to me",
-  },
-  {
-    role: "assistant",
-    content:
-      "Photosynthesis is the process by which plants convert sunlight, water, and CO\u2082 into glucose and oxygen using chlorophyll.",
-    model_used: "cache",
-    cache_hit: true,
-  },
-  {
-    role: "user",
-    content:
-      "Write a Python function to parse a CSV and compute rolling averages",
-  },
-];
+type ChatPanelProps = {
+  messages: Message[];
+  setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+};
 
-export default function ChatPanel() {
+export default function ChatPanel({ messages, setMessages }: ChatPanelProps) {
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const prompt = input.trim();
+    if (!prompt || loading) return;
+
+    const userMessage: Message = { role: "user", content: prompt };
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
+    setLoading(true);
+
+    try {
+      const res = await fetch("/api/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Request failed");
+
+      const assistantMessage: Message = {
+        role: "assistant",
+        content: data.answer,
+        model_used: data.model_used,
+        cache_hit: data.cache_hit,
+        energy_kwh: data.energy_kwh,
+        response_time_ms: data.response_time_ms,
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch {
+      const errorMessage: Message = {
+        role: "assistant",
+        content: "Sorry, something went wrong. Please try again.",
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -43,25 +70,52 @@ export default function ChatPanel() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-5">
-        {sampleMessages.map((msg, i) => (
+        {messages.length === 0 && !loading && (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-text-secondary text-sm">
+              Ask something to get started...
+            </p>
+          </div>
+        )}
+        {messages.map((msg, i) => (
           <ChatMessage key={i} message={msg} />
         ))}
+        {loading && (
+          <div className="flex flex-col gap-1.5 py-4 border-b border-border-subtle">
+            <span className="text-xs font-mono tracking-wider text-green">
+              ECOPROMPT
+            </span>
+            <p className="text-text-secondary text-sm animate-pulse">
+              Thinking...
+            </p>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Input bar */}
-      <div className="px-5 py-4 border-t border-border-subtle">
+      <form
+        onSubmit={handleSubmit}
+        className="px-5 py-4 border-t border-border-subtle"
+      >
         <div className="flex items-center gap-2 bg-surface rounded-lg border border-border-standard px-4 py-2.5">
           <input
             type="text"
             placeholder="Ask something..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
             className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-muted outline-none"
-            disabled
+            disabled={loading}
           />
-          <button className="flex items-center justify-center px-4 py-1.5 bg-text-primary text-page-bg text-sm font-medium rounded-md hover:opacity-90 transition-opacity">
-            Send <span className="ml-1">↑</span>
+          <button
+            type="submit"
+            disabled={loading || !input.trim()}
+            className="flex items-center justify-center px-4 py-1.5 bg-text-primary text-page-bg text-sm font-medium rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            Send <span className="ml-1">&uarr;</span>
           </button>
         </div>
-      </div>
+      </form>
     </div>
   );
 }
