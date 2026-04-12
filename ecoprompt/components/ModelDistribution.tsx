@@ -1,16 +1,17 @@
-type DistributionItem = {
-  label: string;
-  percentage: number;
-  color: string;
+type ModelDistributionProps = {
+  cacheHits: number;
+  smallModel: number;
+  largeModel: number;
+  total: number;
 };
 
-const items: DistributionItem[] = [
-  { label: "Cache hit", percentage: 50, color: "bg-green" },
-  { label: "Small", percentage: 25, color: "bg-blue-500" },
-  { label: "Large", percentage: 25, color: "bg-purple-500" },
-];
-
-export default function ModelDistribution() {
+export default function ModelDistribution({ cacheHits, smallModel, largeModel, total }: ModelDistributionProps) {
+  const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+  const items = [
+    { label: "Cache hit", percentage: pct(cacheHits), color: "bg-green" },
+    { label: "Small", percentage: pct(smallModel), color: "bg-blue-500" },
+    { label: "Large", percentage: pct(largeModel), color: "bg-purple-500" },
+  ];
   return (
     <div className="flex flex-col gap-3">
       <h3 className="text-xs font-mono tracking-wider text-text-muted uppercase">

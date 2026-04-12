@@ -7,9 +7,10 @@ import ChatMessage from "./ChatMessage";
 type ChatPanelProps = {
   messages: Message[];
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>;
+  onQueryComplete?: () => void;
 };
 
-export default function ChatPanel({ messages, setMessages }: ChatPanelProps) {
+export default function ChatPanel({ messages, setMessages, onQueryComplete }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -48,6 +49,7 @@ export default function ChatPanel({ messages, setMessages }: ChatPanelProps) {
         response_time_ms: data.response_time_ms,
       };
       setMessages((prev) => [...prev, assistantMessage]);
+      onQueryComplete?.();
     } catch {
       const errorMessage: Message = {
         role: "assistant",

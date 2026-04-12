@@ -3,8 +3,7 @@ import { invokeModel } from "@/lib/bedrock";
 import { classifyComplexity, MODEL_IDS } from "@/lib/classifier";
 import { deduplicate } from "@/lib/dedup";
 import { storeEntry } from "@/lib/vectorStore";
-
-const ENERGY_KWH = { simple: 0.007, complex: 0.021 } as const;
+import { estimateEnergy, logMetric } from "@/lib/metrics";
 
 export async function POST(request: Request) {
   const { prompt } = await request.json();
@@ -19,12 +18,25 @@ export async function POST(request: Request) {
     const dedup = await deduplicate(prompt);
 
     if (dedup.hit) {
+      const response_time_ms = Date.now() - start;
+      const { energy_kwh, co2_kg } = estimateEnergy(true, "cache");
+
+      await logMetric({
+        prompt_preview: prompt.slice(0, 100),
+        cache_hit: true,
+        model_used: "cache",
+        energy_kwh,
+        co2_kg,
+        response_time_ms,
+      });
+
       return NextResponse.json({
         answer: dedup.response,
         model_used: "cache",
         cache_hit: true,
-        energy_kwh: 0,
-        response_time_ms: Date.now() - start,
+        energy_kwh,
+        co2_kg,
+        response_time_ms,
       });
     }
 
@@ -34,14 +46,25 @@ export async function POST(request: Request) {
 
     const answer = await invokeModel(prompt, modelId);
     const response_time_ms = Date.now() - start;
+    const { energy_kwh, co2_kg } = estimateEnergy(false, modelLabel);
 
     await storeEntry(prompt, dedup.embedding, answer, modelLabel);
+
+    await logMetric({
+      prompt_preview: prompt.slice(0, 100),
+      cache_hit: false,
+      model_used: modelLabel,
+      energy_kwh,
+      co2_kg,
+      response_time_ms,
+    });
 
     return NextResponse.json({
       answer,
       model_used: modelLabel,
       cache_hit: false,
-      energy_kwh: ENERGY_KWH[tier],
+      energy_kwh,
+      co2_kg,
       response_time_ms,
     });
   } catch (error: unknown) {
