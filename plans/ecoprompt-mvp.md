@@ -30,13 +30,25 @@
 
 Three reference files in `design/` control the visual design. Read `design/README.md` for full guidance. Summary:
 
+### Visual Templates (PRIMARY — match these)
+
+| File | What It Shows |
+|---|---|
+| `design/DesignTemplate1.png` | Landing/hero page: headline, stats row, CTA buttons |
+| `design/DesignTemplate2.png` | Main app: split-screen chat + sustainability dashboard |
+| `design/Logo.png` | Green leaf gradient logo — use in header/nav |
+
+### Style Tokens (SECONDARY — extract values for implementation)
+
 | File | Use For | Key Extractions |
 |---|---|---|
 | `design/colors.md` | Colors & theme | Dark mode: bg `#171717`, text `#fafafa`, green accent `#3ecf8e`, border hierarchy `#242424`→`#2e2e2e`→`#363636`. No shadows — depth via borders |
 | `design/fonts.md` | Typography | Geist Sans + Geist Mono. Display 48px/600/-2.4px tracking. Body 16px/400. Three weights: 400, 500, 600 |
 | `design/layout.md` | Layout & components | 8px base spacing. Cards 4-6px radius. Buttons 6px radius. Pills 9999px. Responsive stack below 768px |
 
-**Conflict rule:** colors.md wins for theme, fonts.md wins for typography, layout.md wins for spacing/structure.
+**Priority:** Design template PNGs > colors.md > fonts.md > layout.md. If a style MD conflicts with the templates, **templates win**.
+
+Read `design/README.md` for full guidance on how to use each file.
 
 ---
 
@@ -57,14 +69,24 @@ Three reference files in `design/` control the visual design. Read `design/READM
 
 ### Context Brief
 
-Create a Next.js 14 App Router project with TypeScript and Tailwind CSS. Build the split-screen layout: ChatPanel on the left (~55% width), DashboardPanel on the right (~45% width). All data is hardcoded/placeholder — no API calls, no Bedrock, no DynamoDB.
+Create a Next.js 14 App Router project with TypeScript and Tailwind CSS. Build two pages:
 
-**Design system:** Read `design/README.md` first, then extract from each design file:
-- **Colors/theme** from `design/colors.md` — dark mode, Supabase-inspired color palette, border depth system
-- **Typography** from `design/fonts.md` — Geist Sans + Geist Mono font system, weight/size/spacing rules
-- **Layout/components** from `design/layout.md` — spacing, border-radius, card/button patterns, responsive behavior
+1. **Landing page** (`/`) — match `design/DesignTemplate1.png` exactly. Hero headline, stats row, CTA buttons. "See the demo" button links to `/app`.
+2. **App page** (`/app`) — match `design/DesignTemplate2.png` exactly. Split-screen: ChatPanel left, DashboardPanel right.
 
-The app should match the spec's UI layout diagram (`EcoPrompt_Project_Spec.md` Section "UI Layout") while using the design system from `design/`.
+All data is hardcoded/placeholder — no API calls, no Bedrock, no DynamoDB.
+
+**Design system:** Read `design/README.md` first. The **PNG templates are the primary reference** for how the app should look. Extract color values from `design/colors.md`, font rules from `design/fonts.md`, and spacing from `design/layout.md`. Use `design/Logo.png` as the app logo (copy it to `public/logo.png`).
+
+**Key details from DesignTemplate2 (the app page):**
+- Chat header: "CHAT". Dashboard header: "SUSTAINABILITY DASHBOARD"
+- Messages labeled "USER" and "ECOPROMPT" (not "assistant")
+- Badge format: green pill "Small model - Haiku", "Cache hit - 0 LLM calls"
+- Input: "Ask something..." placeholder with "Send" button
+- Dashboard stat cards with subtitles: "live", "2 of 4 served", "2 LLM calls avoided", "EPA grid factors"
+- Model Distribution: **horizontal bar chart** (not bar chart) — Cache hit / Small / Large with percentages
+- Headline stat with scale projection: "At 1M queries/day with this hit rate: 500,000 server calls never happen."
+- Query Log: timestamped list at bottom showing SMALL, HIT entries
 
 ### Files to Create
 
@@ -72,17 +94,21 @@ The app should match the spec's UI layout diagram (`EcoPrompt_Project_Spec.md` S
 |---|---|
 | `package.json` | Next.js 14, React 18, Tailwind, TypeScript deps |
 | `tsconfig.json` | TypeScript config |
-| `tailwind.config.ts` | Tailwind config with custom theme |
+| `tailwind.config.ts` | Tailwind config with design system tokens |
 | `postcss.config.mjs` | PostCSS for Tailwind |
 | `next.config.ts` | Next.js config |
-| `app/layout.tsx` | Root layout with Inter font, metadata, dark bg |
-| `app/page.tsx` | Split-screen: ChatPanel left + DashboardPanel right |
+| `public/logo.png` | Logo copied from `design/Logo.png` |
+| `app/layout.tsx` | Root layout with Geist font, metadata, dark bg |
+| `app/page.tsx` | Landing page matching `DesignTemplate1.png` — hero, stats, CTAs |
+| `app/app/page.tsx` | App page matching `DesignTemplate2.png` — split-screen chat + dashboard |
 | `app/globals.css` | Tailwind directives + base dark theme styles |
 | `lib/types.ts` | Shared types: `Message`, `DashboardMetrics`, `QueryResponse` — used across all phases |
-| `components/ChatPanel.tsx` | Left panel: message list + input box. Hardcoded 3 sample messages showing all badge types |
-| `components/DashboardPanel.tsx` | Right panel: stat cards + chart placeholders. Hardcoded numbers |
-| `components/ChatMessage.tsx` | Single message bubble with badge (Cache Hit / Small Model / Large Model) |
-| `components/MetricsCounter.tsx` | Stat card showing a label + number |
+| `components/ChatPanel.tsx` | Left panel: message list + input. Hardcoded 3 sample messages showing all badge types |
+| `components/DashboardPanel.tsx` | Right panel: stat cards, bar chart, headline stat, query log. Hardcoded numbers |
+| `components/ChatMessage.tsx` | Single message with USER/ECOPROMPT labels and badge pills |
+| `components/MetricsCounter.tsx` | Stat card with label, number, and subtitle |
+| `components/QueryLog.tsx` | Timestamped query history log at bottom of dashboard |
+| `components/ModelDistribution.tsx` | Horizontal bar chart: cache hit / small / large with percentages |
 | `.env.local.example` | Template for env vars (no secrets) |
 | `.gitignore` | Node, Next.js, env files |
 
@@ -90,8 +116,10 @@ The app should match the spec's UI layout diagram (`EcoPrompt_Project_Spec.md` S
 
 1. Run `npx create-next-app@latest ecoprompt --typescript --tailwind --app --src-dir=false --import-alias="@/*" --use-npm` inside `/Users/dyl/shiftH/` — then move contents up or work inside the `ecoprompt/` subdirectory. **Decision: work inside `ecoprompt/` subdirectory** to keep spec files at repo root.
 2. Set up Tailwind theme in `tailwind.config.ts` — extract all color tokens from `design/colors.md`: page bg `#171717`, card surfaces, brand green `#3ecf8e`, border hierarchy (`#242424`, `#2e2e2e`, `#363636`), text colors (`#fafafa`, `#b4b4b4`, `#898989`). Add Geist font family from `design/fonts.md`.
-3. Build `app/layout.tsx` — full viewport, dark bg `#171717`, Geist Sans font (load via `next/font/google` or CDN), title "EcoPrompt".
-4. Build `app/page.tsx` — flex row, left panel 55% width, right panel 45% width, responsive (stack vertically on mobile).
+3. Copy `design/Logo.png` to `public/logo.png`.
+4. Build `app/layout.tsx` — full viewport, dark bg `#171717`, Geist Sans font (load via `next/font/google` or CDN), title "EcoPrompt".
+5. Build `app/page.tsx` — **landing page matching `design/DesignTemplate1.png`**: logo, top label "AI + AWS - Amazon Bedrock", hero headline "The most sustainable AI compute is the compute you never run.", subtitle, two CTA buttons ("See the demo" links to `/app`, "Read the architecture"), stats row at bottom (~10x, 0.92, 300k, 0 kg).
+6. Build `app/app/page.tsx` — **app page matching `design/DesignTemplate2.png`**: flex row, ChatPanel left ~55%, DashboardPanel right ~45%, responsive (stack vertically on mobile).
 5. Create `lib/types.ts` — shared types used across all phases:
    ```typescript
    export type Message = {
@@ -126,23 +154,28 @@ The app should match the spec's UI layout diagram (`EcoPrompt_Project_Spec.md` S
      response_time_ms: number;
    };
    ```
-6. Build `components/ChatMessage.tsx` — message bubble with: role (user/assistant), content text, optional badge (`cache_hit` | `small_model` | `large_model`), optional response time in ms. Badge renders as colored pill (9999px radius per `design/layout.md`): yellow/lightning for cache hit, green `#3ecf8e` for small model, blue for large model. Card styling per `design/colors.md` depth system — borders not shadows.
-6. Build `components/ChatPanel.tsx` — scrollable message list + fixed input bar at bottom. Hardcode 3 messages: one with green badge, one with cache hit badge, one with blue badge. Input is non-functional (just styled).
-7. Build `components/MetricsCounter.tsx` — card with label, large number, optional subtitle.
-8. Build `components/DashboardPanel.tsx` — grid of MetricsCounter cards (Total Queries: 4, Cache Hit Rate: 50%, Energy Saved: 0.01 kWh, CO2 Avoided: 0.004 kg). Below the cards, placeholder boxes labeled "Energy Saved Over Time" and "Query Distribution" where charts will go later.
-9. Add footer bar: "Built with Amazon Bedrock · Titan Embeddings · Amazon DynamoDB".
-10. Create `.env.local.example` with placeholder keys: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`.
+7. Build `components/ChatMessage.tsx` — match DesignTemplate2: message with "USER" or "ECOPROMPT" label, content text, optional badge pill. Badge format: green pill "Small model - Haiku", "Cache hit - 0 LLM calls", "Large model - Sonnet". Badge styling per `design/colors.md` and `design/layout.md` (9999px radius).
+8. Build `components/ChatPanel.tsx` — match DesignTemplate2: "CHAT" header, scrollable message list, fixed input bar "Ask something..." with "Send" button. Hardcode 3 messages matching the template (photosynthesis Q&A + cache hit + Python CSV query).
+9. Build `components/MetricsCounter.tsx` — stat card with label, large number, and subtitle (e.g., "live", "2 of 4 served", "2 LLM calls avoided", "EPA grid factors").
+10. Build `components/ModelDistribution.tsx` — horizontal bar chart matching DesignTemplate2: three bars (Cache hit, Small, Large) with percentage labels. Hardcoded values: 50%, 25%, 25%.
+11. Build `components/QueryLog.tsx` — timestamped query history matching DesignTemplate2: "QUERY LOG" header, entries like "0:04 SMALL What is photosynthesis?", "0:09 HIT Explain photosynthesis to me".
+12. Build `components/DashboardPanel.tsx` — match DesignTemplate2: "SUSTAINABILITY DASHBOARD" header, grid of MetricsCounter cards (Total Queries: 4, Cache Hit Rate: 50%, Energy Saved: 0.01 kWh, CO2 Avoided: 0.004 kg), ModelDistribution bar chart, headline stat with scale projection, QueryLog at bottom.
+13. Create `.env.local.example` with placeholder keys: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`.
 
 ### Acceptance Criteria
 
 - [ ] `npm run dev` starts, app renders at localhost:3000
-- [ ] Split-screen layout visible: chat left, dashboard right
-- [ ] 3 hardcoded chat messages with colored badges are visible
-- [ ] 4 metric cards display placeholder numbers
-- [ ] Chart placeholder areas visible
-- [ ] Footer displays tech stack
+- [ ] Landing page at `/` matches DesignTemplate1.png — hero, stats, CTAs
+- [ ] "See the demo" button navigates to `/app`
+- [ ] App page at `/app` matches DesignTemplate2.png — split-screen chat + dashboard
+- [ ] Logo visible on landing page
+- [ ] 3 hardcoded chat messages with USER/ECOPROMPT labels and badge pills
+- [ ] 4 metric cards with subtitles display placeholder numbers
+- [ ] Horizontal bar chart for model distribution
+- [ ] Headline stat with scale projection text
+- [ ] Query log with timestamped entries
 - [ ] `npm run build` succeeds
-- [ ] Dark theme throughout
+- [ ] Dark theme throughout, Geist font
 
 ### Verification Commands
 
@@ -172,7 +205,7 @@ Wire up Amazon Bedrock for LLM calls. Create a `/api/query` route that accepts a
 | `app/api/query/route.ts` | Create | POST handler: receives `{ prompt }`, calls `invokeModel()`, returns `{ answer, model_used, cache_hit: false, energy_kwh, response_time_ms }` |
 | `components/ChatPanel.tsx` | Modify | Make input functional: on submit, POST to `/api/query`, append user message + assistant response to state. Show loading indicator while waiting |
 | `components/ChatMessage.tsx` | Modify | Add response_time_ms display |
-| `app/page.tsx` | Modify | Lift messages state to page level, pass to both ChatPanel and DashboardPanel |
+| `app/app/page.tsx` | Modify | Lift messages state to page level, pass to both ChatPanel and DashboardPanel |
 | `package.json` | Modify | Add `@aws-sdk/client-bedrock-runtime` |
 | `.env.local.example` | Modify | Add `BEDROCK_REGION` (default `us-east-1`) |
 
@@ -564,14 +597,14 @@ cd /Users/dyl/shiftH/ecoprompt && npm run build
 
 ### Context Brief
 
-Final polish pass. Add animated number counters, a line chart showing cumulative energy saved over time, a pie chart showing query distribution (cache hit vs small model vs large model), and a prominent headline stat. Tune the similarity threshold. Verify the full demo script runs successfully.
+Final polish pass. Add animated number counters, a line chart showing cumulative energy saved over time, a bar chart showing query distribution (cache hit vs small model vs large model), and a prominent headline stat. Tune the similarity threshold. Verify the full demo script runs successfully.
 
 ### Files to Create/Modify
 
 | File | Action | Purpose |
 |---|---|---|
 | `components/EnergyChart.tsx` | Create | Line chart: cumulative energy saved over time (use recharts or lightweight chart lib) |
-| `components/QueryDistribution.tsx` | Create | Pie/donut chart: cache hit vs small model vs large model counts |
+| `components/QueryDistribution.tsx` | Modify | Update `ModelDistribution.tsx` (created in Phase 1) with live data from metrics |
 | `components/HeadlineStat.tsx` | Create | Large prominent stat: "X queries avoided, saving ~Y kWh / Z kg CO2" |
 | `components/MetricsCounter.tsx` | Modify | Add count-up animation (CSS or lightweight JS) |
 | `components/DashboardPanel.tsx` | Modify | Integrate charts + headline stat, replace placeholders |
@@ -589,11 +622,10 @@ Final polish pass. Add animated number counters, a line chart showing cumulative
    - Green line on dark bg
    - Responsive, fills container width
 
-3. Create `components/QueryDistribution.tsx` (**must include `"use client"` directive**):
-   - Pie/donut chart using recharts `<PieChart>` + `<Pie>` + `<Cell>`
-   - Three slices: Cache Hit (yellow), Small Model (green), Large Model (blue) — matching badge colors
-   - Show counts and percentages
-   - Legend below chart
+3. Update `components/ModelDistribution.tsx` (created in Phase 1 with hardcoded data):
+   - Accept live distribution data as props
+   - Keep the horizontal bar chart format from DesignTemplate2 — do NOT switch to a bar chart
+   - Update bar widths and percentage labels dynamically
 
 4. Create `components/HeadlineStat.tsx`:
    - Large centered text: "X LLM calls avoided"
@@ -609,7 +641,7 @@ Final polish pass. Add animated number counters, a line chart showing cumulative
 6. Modify `lib/metrics.ts`:
    - `getAggregatedMetrics()` now also returns:
      - `timeline`: array of `{ query_number, cumulative_energy_saved }` for line chart
-     - `distribution`: `{ cache_hits: N, small_model: N, large_model: N }` for pie chart
+     - `distribution`: `{ cache_hits: N, small_model: N, large_model: N }` for bar chart
 
 7. Modify `app/api/metrics/route.ts`:
    - Return extended metrics including timeline and distribution
@@ -617,7 +649,7 @@ Final polish pass. Add animated number counters, a line chart showing cumulative
 8. Modify `components/DashboardPanel.tsx`:
    - Replace chart placeholders with actual `<EnergyChart>` and `<QueryDistribution>` components
    - Add `<HeadlineStat>` at the top of the dashboard
-   - Layout: HeadlineStat → Metric cards row → Energy chart → Pie chart
+   - Layout: HeadlineStat → Metric cards row → Energy chart → Bar chart
 
 9. Final styling pass:
    - Ensure consistent dark theme
@@ -632,18 +664,18 @@ Final polish pass. Add animated number counters, a line chart showing cumulative
     - Query 4: Same as query 3 → ⚡ Cache Hit. Dashboard: 4 queries, 2 cache hits.
     - Query 5: (bonus) Any new simple query to show the system still works.
     - Verify: Headline stat reads "2 LLM calls avoided, saving ~0.01 kWh / 0.004 kg CO2" (approximately).
-    - Verify: Line chart shows upward trend. Pie chart shows distribution.
+    - Verify: Line chart shows upward trend. Bar chart shows distribution.
 
 ### Acceptance Criteria
 
 - [ ] Animated number counters on metric cards
 - [ ] Line chart renders and updates with each query
-- [ ] Pie chart shows correct distribution with matching badge colors
+- [ ] Bar chart shows correct distribution with matching badge colors
 - [ ] Headline stat prominently displays savings
 - [ ] Full demo script (5 queries) runs end-to-end
 - [ ] Cache hits are visibly instant vs model calls
 - [ ] Dashboard updates in real time after each query
-- [ ] Green/blue/yellow badge colors are consistent between chat and pie chart
+- [ ] Green/blue/yellow badge colors are consistent between chat and bar chart
 - [ ] `npm run build` succeeds
 - [ ] App looks polished and demo-ready
 
@@ -662,7 +694,7 @@ The 5-query demo script from `EcoPrompt_Project_Spec.md` Section "Demo Script" r
 3. Complex query → Large Model badge + dashboard update
 4. Repeat complex query → Cache Hit badge + energy saved increases
 5. Dashboard headline shows correct cumulative savings
-6. Line chart trends upward, pie chart reflects distribution
+6. Line chart trends upward, bar chart reflects distribution
 
 ---
 
