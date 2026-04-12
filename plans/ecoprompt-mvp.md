@@ -1,0 +1,687 @@
+# EcoPrompt MVP — Construction Plan
+
+**Objective:** Build a standalone Next.js web app with split-screen UI (chat + sustainability dashboard) that reduces redundant AI compute via semantic deduplication, model right-sizing, and real-time environmental impact visualization.
+
+**Exit criterion:** The demo script from the spec runs end-to-end — 5+ queries demonstrating cache hits, model routing, and live dashboard updates.
+
+**Context:** ShiftSC Hackathon project. Optimize for speed-to-demo, not production robustness. Minimal error handling, no tests.
+
+**Remote:** github.com/DY0810/ShiftSCHackathon (branch: `main`)
+
+---
+
+## Tech Stack (Locked)
+
+| Layer | Choice | Why |
+|---|---|---|
+| Frontend | Next.js 14+ App Router + TypeScript + Tailwind CSS | Fast, full-stack, SSR |
+| LLM | Amazon Bedrock (Claude Haiku + Sonnet) | AWS requirement, multi-model |
+| Embeddings | Amazon Titan Embeddings v2 (via Bedrock) | AWS-native, 1024-dim vectors |
+| Vector Store | Supabase pgvector | Fast setup, cosine similarity built-in |
+| Metrics DB | Supabase Postgres (same instance) | Single data layer |
+| Hosting | Vercel | Zero-config Next.js deploys |
+
+---
+
+## Invariants (Verified After Every Phase)
+
+1. `npm run build` succeeds with zero errors
+2. `npm run dev` starts and the app renders at `localhost:3000`
+3. No TypeScript errors (`npx tsc --noEmit`)
+4. All previous-phase functionality still works (no regressions)
+
+---
+
+## Phase 1: Scaffold + Split-Screen UI Shell
+
+**Branch:** `phase-1-scaffold`
+**Depends on:** Nothing
+**Model tier:** Default (Sonnet)
+
+### Context Brief
+
+Create a Next.js 14 App Router project with TypeScript and Tailwind CSS. Build the split-screen layout: ChatPanel on the left (~55% width), DashboardPanel on the right (~45% width). All data is hardcoded/placeholder — no API calls, no Bedrock, no Supabase. The app must render and look like the spec's UI layout diagram.
+
+### Files to Create
+
+| File | Purpose |
+|---|---|
+| `package.json` | Next.js 14, React 18, Tailwind, TypeScript deps |
+| `tsconfig.json` | TypeScript config |
+| `tailwind.config.ts` | Tailwind config with custom theme |
+| `postcss.config.mjs` | PostCSS for Tailwind |
+| `next.config.ts` | Next.js config |
+| `app/layout.tsx` | Root layout with Inter font, metadata, dark bg |
+| `app/page.tsx` | Split-screen: ChatPanel left + DashboardPanel right |
+| `app/globals.css` | Tailwind directives + base dark theme styles |
+| `lib/types.ts` | Shared types: `Message`, `DashboardMetrics`, `QueryResponse` — used across all phases |
+| `components/ChatPanel.tsx` | Left panel: message list + input box. Hardcoded 3 sample messages showing all badge types |
+| `components/DashboardPanel.tsx` | Right panel: stat cards + chart placeholders. Hardcoded numbers |
+| `components/ChatMessage.tsx` | Single message bubble with badge (Cache Hit / Small Model / Large Model) |
+| `components/MetricsCounter.tsx` | Stat card showing a label + number |
+| `.env.local.example` | Template for env vars (no secrets) |
+| `.gitignore` | Node, Next.js, env files |
+
+### Task List
+
+1. Run `npx create-next-app@latest ecoprompt --typescript --tailwind --app --src-dir=false --import-alias="@/*" --use-npm` inside `/Users/dyl/shiftH/` — then move contents up or work inside the `ecoprompt/` subdirectory. **Decision: work inside `ecoprompt/` subdirectory** to keep spec files at repo root.
+2. Set up dark theme in `tailwind.config.ts` (dark background `#0a0a0a`, card bg `#1a1a2e`, accent green `#00d4aa`, accent blue `#3b82f6`).
+3. Build `app/layout.tsx` — full viewport, dark bg, Inter font, title "EcoPrompt".
+4. Build `app/page.tsx` — flex row, left panel 55% width, right panel 45% width, responsive (stack vertically on mobile).
+5. Create `lib/types.ts` — shared types used across all phases:
+   ```typescript
+   export type Message = {
+     role: 'user' | 'assistant';
+     content: string;
+     model_used?: 'haiku' | 'sonnet' | 'cache';
+     cache_hit?: boolean;
+     energy_kwh?: number;
+     response_time_ms?: number;
+   };
+
+   export type DashboardMetrics = {
+     total_queries: number;
+     cache_hits: number;
+     cache_hit_rate: number;
+     small_model_count: number;
+     large_model_count: number;
+     total_energy_kwh: number;
+     total_co2_kg: number;
+     energy_saved_kwh: number;
+     co2_saved_kg: number;
+     timeline: { query_number: number; cumulative_energy_saved: number }[];
+     distribution: { cache_hits: number; small_model: number; large_model: number };
+   };
+
+   export type QueryResponse = {
+     answer: string;
+     model_used: string;
+     cache_hit: boolean;
+     energy_kwh: number;
+     co2_kg: number;
+     response_time_ms: number;
+   };
+   ```
+6. Build `components/ChatMessage.tsx` — message bubble with: role (user/assistant), content text, optional badge (`cache_hit` | `small_model` | `large_model`), optional response time in ms. Badge renders as colored pill: yellow/lightning for cache hit, green for small model, blue for large model.
+6. Build `components/ChatPanel.tsx` — scrollable message list + fixed input bar at bottom. Hardcode 3 messages: one with green badge, one with cache hit badge, one with blue badge. Input is non-functional (just styled).
+7. Build `components/MetricsCounter.tsx` — card with label, large number, optional subtitle.
+8. Build `components/DashboardPanel.tsx` — grid of MetricsCounter cards (Total Queries: 4, Cache Hit Rate: 50%, Energy Saved: 0.01 kWh, CO2 Avoided: 0.004 kg). Below the cards, placeholder boxes labeled "Energy Saved Over Time" and "Query Distribution" where charts will go later.
+9. Add footer bar: "Built with Amazon Bedrock · Titan Embeddings · Supabase pgvector".
+10. Create `.env.local.example` with placeholder keys: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
+
+### Acceptance Criteria
+
+- [ ] `npm run dev` starts, app renders at localhost:3000
+- [ ] Split-screen layout visible: chat left, dashboard right
+- [ ] 3 hardcoded chat messages with colored badges are visible
+- [ ] 4 metric cards display placeholder numbers
+- [ ] Chart placeholder areas visible
+- [ ] Footer displays tech stack
+- [ ] `npm run build` succeeds
+- [ ] Dark theme throughout
+
+### Verification Commands
+
+```bash
+cd /Users/dyl/shiftH/ecoprompt && npm run build
+cd /Users/dyl/shiftH/ecoprompt && npx tsc --noEmit
+cd /Users/dyl/shiftH/ecoprompt && npm run dev  # manual check: open localhost:3000
+```
+
+---
+
+## Phase 2: Bedrock LLM Integration
+
+**Branch:** `phase-2-bedrock`
+**Depends on:** Phase 1
+**Model tier:** Default (Sonnet)
+
+### Context Brief
+
+Wire up Amazon Bedrock for LLM calls. Create a `/api/query` route that accepts a user prompt, calls Bedrock (Claude Sonnet for now — model routing comes in Phase 4), and returns the response. The ChatPanel becomes functional: user types a prompt, it posts to the API, response appears in the chat. No deduplication, no embeddings, no metrics logging yet — just raw prompt-to-response.
+
+### Files to Create/Modify
+
+| File | Action | Purpose |
+|---|---|---|
+| `lib/bedrock.ts` | Create | Bedrock client: `invokeModel()` function using `@aws-sdk/client-bedrock-runtime`. Takes prompt string, model ID, returns response text |
+| `app/api/query/route.ts` | Create | POST handler: receives `{ prompt }`, calls `invokeModel()`, returns `{ answer, model_used, cache_hit: false, energy_kwh, response_time_ms }` |
+| `components/ChatPanel.tsx` | Modify | Make input functional: on submit, POST to `/api/query`, append user message + assistant response to state. Show loading indicator while waiting |
+| `components/ChatMessage.tsx` | Modify | Add response_time_ms display |
+| `app/page.tsx` | Modify | Lift messages state to page level, pass to both ChatPanel and DashboardPanel |
+| `package.json` | Modify | Add `@aws-sdk/client-bedrock-runtime` |
+| `.env.local.example` | Modify | Add `BEDROCK_REGION` (default `us-east-1`) |
+
+### Task List
+
+1. `npm install @aws-sdk/client-bedrock-runtime`
+2. Create `lib/bedrock.ts`:
+   - Import `BedrockRuntimeClient`, `InvokeModelCommand` from `@aws-sdk/client-bedrock-runtime`
+   - Create client with region from env `AWS_REGION` (default `us-east-1`)
+   - Export `async function invokeModel(prompt: string, modelId: string): Promise<string>`
+   - For Claude models, format the request body as: `{ anthropic_version: "bedrock-2023-05-31", max_tokens: 1024, messages: [{ role: "user", content: prompt }] }`
+   - Parse response body, extract `content[0].text`
+   - Default model ID: `anthropic.claude-3-haiku-20240307-v1:0` (will be parameterized in Phase 4)
+3. Create `app/api/query/route.ts`:
+   - POST handler accepts JSON body `{ prompt: string }`
+   - Records start time
+   - Calls `invokeModel(prompt, MODEL_ID)`
+   - Calculates `response_time_ms`
+   - Returns JSON: `{ answer, model_used: "sonnet", cache_hit: false, energy_kwh: 0.007, response_time_ms }`
+   - Energy is hardcoded for now (Phase 5 will compute it properly)
+4. Modify `components/ChatPanel.tsx`:
+   - Replace hardcoded messages with `messages` state (prop from parent)
+   - On input submit: add user message to state, POST to `/api/query`, add assistant message to state with metadata from response
+   - Show "Thinking..." indicator while API call is in flight
+   - Clear input after submit
+5. Modify `app/page.tsx`:
+   - State: `messages` array. Pass to ChatPanel. Pass to DashboardPanel (for future metric computation).
+   - Import `Message` type from `lib/types.ts` (already defined in Phase 1)
+6. Remove hardcoded sample messages — the chat starts empty.
+
+### Acceptance Criteria
+
+- [ ] User types a prompt, presses Enter/Send
+- [ ] "Thinking..." indicator appears
+- [ ] Real Bedrock response appears in chat within a few seconds
+- [ ] Response shows model badge (hardcoded to one model for now)
+- [ ] Response time is displayed on the message
+- [ ] Multiple back-to-back queries work
+- [ ] Dashboard still renders (still showing placeholders)
+- [ ] `npm run build` succeeds
+
+### Verification Commands
+
+```bash
+cd /Users/dyl/shiftH/ecoprompt && npm run build
+# Manual: open localhost:3000, type "What is photosynthesis?", verify Bedrock response appears
+# Manual: type "Write hello world in Python", verify response appears
+```
+
+### Environment Setup Required
+
+The executor must have a `.env.local` file with valid AWS credentials:
+```
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=us-east-1
+```
+These credentials must have `bedrock:InvokeModel` permission for Claude models in the specified region.
+
+---
+
+## Phase 3: Semantic Deduplication
+
+**Branch:** `phase-3-dedup`
+**Depends on:** Phase 2
+**Model tier:** Strongest (Opus) — this is the core algorithmic logic
+
+### Context Brief
+
+Add semantic deduplication — the primary differentiator. When a user sends a prompt: (1) generate an embedding via Titan Embeddings, (2) search Supabase pgvector for similar past queries using cosine similarity, (3) if similarity >= 0.92, return the cached response (cache hit — zero LLM call), (4) if no match, call Bedrock LLM, then store the new embedding + response in the vector store. The ChatPanel should show a yellow "Cache Hit" badge for cached responses.
+
+### Files to Create/Modify
+
+| File | Action | Purpose |
+|---|---|---|
+| `lib/bedrock.ts` | Modify | Add `generateEmbedding(text: string): Promise<number[]>` using Titan Embeddings v2 |
+| `lib/vectorStore.ts` | Create | Supabase client. Functions: `searchSimilar(embedding, threshold)` returns `{ match, similarity, cached_response }` or null. `storeEntry(prompt, embedding, response, model_used)` inserts new row |
+| `lib/dedup.ts` | Create | Orchestrates: `embed → search → hit/miss` logic. Exports `deduplicate(prompt): Promise<{ hit: boolean, response?: string, similarity?: number }>` |
+| `app/api/query/route.ts` | Modify | Integrate dedup: call `deduplicate()` first. If hit, return cached response with `cache_hit: true`. If miss, call Bedrock, then store via vectorStore |
+| `package.json` | Modify | Add `@supabase/supabase-js` |
+| `.env.local.example` | Modify | Add Supabase vars |
+
+### Task List
+
+1. **⚠️ PREREQUISITE — Supabase setup** (must be done manually or via Supabase MCP BEFORE any code in this phase — without this, all queries will fail):
+   - Enable the `vector` extension in Supabase: `CREATE EXTENSION IF NOT EXISTS vector;`
+   - Create the table:
+     ```sql
+     CREATE TABLE query_cache (
+       id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+       prompt TEXT NOT NULL,
+       embedding VECTOR(1024) NOT NULL,
+       response TEXT NOT NULL,
+       model_used TEXT NOT NULL,
+       created_at TIMESTAMPTZ DEFAULT NOW()
+     );
+     CREATE INDEX ON query_cache USING hnsw (embedding vector_cosine_ops);
+     ```
+   - Note: Titan Embeddings v2 produces 1024-dimensional vectors.
+
+2. `npm install @supabase/supabase-js`
+
+3. Modify `lib/bedrock.ts` — add embedding function:
+   - `async function generateEmbedding(text: string): Promise<number[]>`
+   - Model ID: `amazon.titan-embed-text-v2:0`
+   - Request body: `{ inputText: text, dimensions: 1024, normalize: true }`
+   - Parse response, return the `embedding` array
+
+4. Create `lib/vectorStore.ts`:
+   - Initialize Supabase client from env vars (`NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`)
+   - `searchSimilar(embedding: number[], threshold: number = 0.92)`:
+     - Use Supabase RPC to call a similarity search function, OR use raw SQL via `.rpc()`:
+       ```sql
+       SELECT id, prompt, response, model_used,
+              1 - (embedding <=> $1::vector) AS similarity
+       FROM query_cache
+       ORDER BY embedding <=> $1::vector
+       LIMIT 1;
+       ```
+     - If top result's similarity >= threshold, return `{ hit: true, response, similarity }`
+     - Otherwise return `{ hit: false }`
+   - `storeEntry(prompt, embedding, response, model_used)`:
+     - Insert row into `query_cache`
+
+   - **Important:** Create a Supabase RPC function for the similarity search:
+     ```sql
+     CREATE OR REPLACE FUNCTION match_queries(
+       query_embedding VECTOR(1024),
+       similarity_threshold FLOAT DEFAULT 0.92,
+       match_count INT DEFAULT 1
+     )
+     RETURNS TABLE (
+       id UUID,
+       prompt TEXT,
+       response TEXT,
+       model_used TEXT,
+       similarity FLOAT
+     )
+     LANGUAGE plpgsql
+     AS $$
+     BEGIN
+       RETURN QUERY
+       SELECT
+         qc.id,
+         qc.prompt,
+         qc.response,
+         qc.model_used,
+         1 - (qc.embedding <=> query_embedding) AS similarity
+       FROM query_cache qc
+       WHERE 1 - (qc.embedding <=> query_embedding) >= similarity_threshold
+       ORDER BY qc.embedding <=> query_embedding
+       LIMIT match_count;
+     END;
+     $$;
+     ```
+
+5. Create `lib/dedup.ts`:
+   - Import `generateEmbedding` from bedrock, `searchSimilar`, `storeEntry` from vectorStore
+   - Export `async function deduplicate(prompt: string)`:
+     - Generate embedding for prompt
+     - Search for similar cached queries
+     - Return `{ hit: boolean, response?: string, similarity?: number, embedding: number[] }`
+   - The embedding is returned so the caller can store it after a cache miss without re-computing
+
+6. Modify `app/api/query/route.ts`:
+   - Call `deduplicate(prompt)` first
+   - If hit: return `{ answer: cached_response, cache_hit: true, model_used: "cache", energy_kwh: 0, response_time_ms }`
+   - If miss: call `invokeModel()`, then call `storeEntry(prompt, embedding, response, model_used)`, return with `cache_hit: false`
+   - Cache hits should be noticeably faster (no LLM latency)
+
+7. Update `components/ChatMessage.tsx` — ensure "cache_hit" badge renders as yellow with lightning bolt icon.
+
+### Acceptance Criteria
+
+- [ ] First query ("What is photosynthesis?") calls Bedrock, returns response with model badge
+- [ ] Second similar query ("Explain photosynthesis to me") returns cached response with "Cache Hit" badge
+- [ ] Cache hit response is visibly faster (no LLM call latency)
+- [ ] Different query ("What is gravity?") is a cache miss, calls Bedrock
+- [ ] Supabase `query_cache` table has rows after queries
+- [ ] `npm run build` succeeds
+
+### Verification Commands
+
+```bash
+cd /Users/dyl/shiftH/ecoprompt && npm run build
+# Manual test sequence:
+# 1. "What is photosynthesis?" → expect model badge (miss)
+# 2. "Explain photosynthesis to me" → expect Cache Hit badge (hit)
+# 3. "What is gravity?" → expect model badge (miss)
+# 4. "Tell me about gravity" → expect Cache Hit badge (hit)
+```
+
+### Environment Setup Required
+
+Add to `.env.local`:
+```
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+```
+Run the SQL setup (table + function) in Supabase SQL Editor before testing.
+
+---
+
+## Phase 4: Model Right-Sizing
+
+**Branch:** `phase-4-routing`
+**Depends on:** Phase 3
+**Model tier:** Default (Sonnet)
+
+### Context Brief
+
+Add a prompt complexity classifier that routes simple prompts to Claude Haiku (small, cheap, fast) and complex prompts to Claude Sonnet (large, capable). The classifier uses heuristic rules — no ML. Each chat message displays which model was used: green badge for Haiku, blue badge for Sonnet.
+
+### Files to Create/Modify
+
+| File | Action | Purpose |
+|---|---|---|
+| `lib/classifier.ts` | Create | `classifyComplexity(prompt: string): 'simple' \| 'complex'` — heuristic rules |
+| `lib/bedrock.ts` | Modify | Make `invokeModel()` accept model ID parameter, add constants for both model IDs |
+| `app/api/query/route.ts` | Modify | Call classifier on cache miss, route to appropriate model |
+| `components/ChatMessage.tsx` | Modify | Distinguish Haiku (green) vs Sonnet (blue) badges |
+
+### Task List
+
+1. Create `lib/classifier.ts`:
+   - Export `function classifyComplexity(prompt: string): 'simple' | 'complex'`
+   - **Simple if ALL of:**
+     - Token count < 100 (approximate: split by spaces, count words)
+     - No code fence (triple backticks) or inline code (single backticks)
+     - No keywords: "write code", "function", "algorithm", "implement", "debug", "refactor", "analyze", "compare", "JSON", "table", "step by step", "explain in detail"
+     - No math symbols: `=`, `+`, `*`, `/`, `^`, `∑`, `∫` (beyond simple punctuation context)
+   - **Complex otherwise**
+   - Export the function and also export `MODEL_IDS` constant:
+     ```typescript
+     export const MODEL_IDS = {
+       simple: 'anthropic.claude-3-haiku-20240307-v1:0',
+       complex: 'anthropic.claude-3-5-sonnet-20241022-v1:0',
+     } as const;
+     ```
+
+2. Modify `lib/bedrock.ts`:
+   - `invokeModel()` already takes a `modelId` parameter — ensure it works with both Haiku and Sonnet model IDs
+   - Both models use the same Messages API format via Bedrock
+
+3. Modify `app/api/query/route.ts`:
+   - On cache miss: call `classifyComplexity(prompt)` to get tier
+   - Use `MODEL_IDS[tier]` to select model
+   - Pass to `invokeModel(prompt, modelId)`
+   - Return `model_used: tier === 'simple' ? 'haiku' : 'sonnet'` in response
+
+4. Modify `components/ChatMessage.tsx`:
+   - Badge logic: `cache_hit` → yellow ⚡, `model_used === 'haiku'` → green 🟢, `model_used === 'sonnet'` → blue 🔵
+   - Badge text: "Cache Hit", "Small Model (Haiku)", "Large Model (Sonnet)"
+
+### Acceptance Criteria
+
+- [ ] "What is photosynthesis?" → green badge (Small Model / Haiku)
+- [ ] "Write a Python function to parse CSV and compute rolling averages" → blue badge (Large Model / Sonnet)
+- [ ] Simple prompts get noticeably faster responses than complex ones
+- [ ] Cache hits still work (return cached response regardless of original model)
+- [ ] `npm run build` succeeds
+
+### Verification Commands
+
+```bash
+cd /Users/dyl/shiftH/ecoprompt && npm run build
+# Manual test:
+# 1. "Hello, how are you?" → Haiku (green badge)
+# 2. "What is photosynthesis?" → Haiku (green badge)
+# 3. "Write a Python function to parse CSV and compute rolling averages" → Sonnet (blue badge)
+# 4. "What is photosynthesis?" again → Cache Hit (yellow badge)
+```
+
+---
+
+## Phase 5: Metrics Logging + Live Dashboard
+
+**Branch:** `phase-5-metrics`
+**Depends on:** Phase 4
+**Model tier:** Default (Sonnet)
+
+### Context Brief
+
+Add per-query metric logging to Supabase and make the dashboard display real, live data. Every query logs: timestamp, cache_hit, model_used, estimated energy, estimated CO2. The dashboard reads metrics and updates after each query without page reload.
+
+### Files to Create/Modify
+
+| File | Action | Purpose |
+|---|---|---|
+| `lib/metrics.ts` | Create | Energy/CO2 estimation constants + `logMetric()` + `getMetrics()` functions |
+| `app/api/query/route.ts` | Modify | Call `logMetric()` after every query (hit or miss) |
+| `app/api/metrics/route.ts` | Create | GET handler returning aggregated metrics |
+| `app/page.tsx` | Modify | After each query, refresh metrics and pass to DashboardPanel |
+| `components/DashboardPanel.tsx` | Modify | Accept real metrics props, display live data |
+| `components/MetricsCounter.tsx` | Modify | Accept value as prop instead of hardcoded |
+
+### Task List
+
+1. **Supabase table** (run in SQL editor):
+   ```sql
+   CREATE TABLE query_metrics (
+     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+     prompt_preview TEXT,
+     cache_hit BOOLEAN NOT NULL,
+     model_used TEXT NOT NULL,
+     energy_kwh FLOAT NOT NULL,
+     co2_kg FLOAT NOT NULL,
+     response_time_ms INT,
+     created_at TIMESTAMPTZ DEFAULT NOW()
+   );
+   ```
+
+2. Create `lib/metrics.ts`:
+   - Energy constants:
+     ```typescript
+     export const ENERGY = {
+       large_model_kwh: 0.007,    // ~0.005-0.01 per spec, use midpoint
+       small_model_kwh: 0.0007,   // ~0.0005-0.001 per spec
+       cache_hit_kwh: 0.0001,     // negligible — just the embedding lookup
+       grid_emission_factor: 0.386, // kg CO2 per kWh, EPA eGRID 2023
+     } as const;
+     ```
+   - `function estimateEnergy(cache_hit: boolean, model_used: string): { energy_kwh: number, co2_kg: number }`:
+     - Cache hit: `ENERGY.cache_hit_kwh`
+     - Haiku: `ENERGY.small_model_kwh`
+     - Sonnet: `ENERGY.large_model_kwh`
+     - CO2 = energy * grid_emission_factor
+     - Also compute `energy_saved`: difference between what would have been used (large model) and what was used
+   - `async function logMetric(data: MetricEntry): Promise<void>` — insert into `query_metrics`
+   - `async function getAggregatedMetrics(): Promise<DashboardMetrics>`:
+     - Query `query_metrics` table
+     - Return: `{ total_queries, cache_hits, cache_hit_rate, small_model_count, large_model_count, total_energy_kwh, total_co2_kg, energy_saved_kwh, co2_saved_kg, timeline: [{timestamp, cumulative_energy_saved}] }`
+     - `energy_saved` = sum of (large_model_energy - actual_energy) for each query
+
+3. Modify `app/api/query/route.ts`:
+   - After getting response (hit or miss), compute energy estimates
+   - Call `logMetric()`
+   - Include energy data in response JSON
+
+4. Create `app/api/metrics/route.ts`:
+   - GET handler: call `getAggregatedMetrics()`, return JSON
+
+5. Modify `app/page.tsx`:
+   - Import `DashboardMetrics` from `lib/types.ts` (already defined in Phase 1)
+   - Add `metrics` state of type `DashboardMetrics`
+   - After each query completes, fetch `/api/metrics` and update state
+   - Pass `metrics` to `DashboardPanel`
+
+6. Modify `components/DashboardPanel.tsx`:
+   - Accept `metrics: DashboardMetrics` prop
+   - Display real values in MetricsCounter cards:
+     - Total Queries
+     - Cache Hit Rate (%)
+     - Energy Saved (kWh)
+     - CO2 Avoided (kg)
+   - Keep chart placeholders (Phase 6 adds charts)
+
+7. Modify `components/MetricsCounter.tsx`:
+   - Accept `value` and `label` props, display dynamically
+
+### Acceptance Criteria
+
+- [ ] Each query logs a row to `query_metrics` table
+- [ ] Dashboard counters update after each query (no page reload)
+- [ ] Cache hits show lower energy than model calls
+- [ ] Total queries counter matches actual query count
+- [ ] Cache hit rate computes correctly
+- [ ] Energy saved and CO2 avoided increment with each cache hit
+- [ ] `npm run build` succeeds
+
+### Verification Commands
+
+```bash
+cd /Users/dyl/shiftH/ecoprompt && npm run build
+# Manual: send 4 queries from demo script, verify dashboard numbers match expected values
+# Check Supabase query_metrics table has 4 rows
+```
+
+---
+
+## Phase 6: Polish — Charts, Animations, Demo-Ready
+
+**Branch:** `phase-6-polish`
+**Depends on:** Phase 5
+**Model tier:** Default (Sonnet)
+
+### Context Brief
+
+Final polish pass. Add animated number counters, a line chart showing cumulative energy saved over time, a pie chart showing query distribution (cache hit vs small model vs large model), and a prominent headline stat. Tune the similarity threshold. Verify the full demo script runs successfully.
+
+### Files to Create/Modify
+
+| File | Action | Purpose |
+|---|---|---|
+| `components/EnergyChart.tsx` | Create | Line chart: cumulative energy saved over time (use recharts or lightweight chart lib) |
+| `components/QueryDistribution.tsx` | Create | Pie/donut chart: cache hit vs small model vs large model counts |
+| `components/HeadlineStat.tsx` | Create | Large prominent stat: "X queries avoided, saving ~Y kWh / Z kg CO2" |
+| `components/MetricsCounter.tsx` | Modify | Add count-up animation (CSS or lightweight JS) |
+| `components/DashboardPanel.tsx` | Modify | Integrate charts + headline stat, replace placeholders |
+| `lib/metrics.ts` | Modify | Return timeline data for line chart |
+| `app/api/metrics/route.ts` | Modify | Include timeline + distribution data in response |
+| `package.json` | Modify | Add `recharts` (lightweight chart lib) |
+
+### Task List
+
+1. `npm install recharts`
+
+2. Create `components/EnergyChart.tsx` (**must include `"use client"` directive** — recharts requires client-side rendering):
+   - Line chart using recharts `<LineChart>` + `<Line>` + `<XAxis>` + `<YAxis>` + `<Tooltip>`
+   - Data: array of `{ query_number, cumulative_energy_saved_kwh }`
+   - Green line on dark bg
+   - Responsive, fills container width
+
+3. Create `components/QueryDistribution.tsx` (**must include `"use client"` directive**):
+   - Pie/donut chart using recharts `<PieChart>` + `<Pie>` + `<Cell>`
+   - Three slices: Cache Hit (yellow), Small Model (green), Large Model (blue) — matching badge colors
+   - Show counts and percentages
+   - Legend below chart
+
+4. Create `components/HeadlineStat.tsx`:
+   - Large centered text: "X LLM calls avoided"
+   - Subtitle: "saving ~Y kWh / Z kg CO2"
+   - Use the green accent color, prominent font size
+   - Values from metrics props
+
+5. Modify `components/MetricsCounter.tsx`:
+   - Animate number from 0 to target value on mount/update
+   - Use `requestAnimationFrame` or CSS `transition` for smooth counting
+   - Format numbers: integers for counts, 3 decimal places for kWh/kg
+
+6. Modify `lib/metrics.ts`:
+   - `getAggregatedMetrics()` now also returns:
+     - `timeline`: array of `{ query_number, cumulative_energy_saved }` for line chart
+     - `distribution`: `{ cache_hits: N, small_model: N, large_model: N }` for pie chart
+
+7. Modify `app/api/metrics/route.ts`:
+   - Return extended metrics including timeline and distribution
+
+8. Modify `components/DashboardPanel.tsx`:
+   - Replace chart placeholders with actual `<EnergyChart>` and `<QueryDistribution>` components
+   - Add `<HeadlineStat>` at the top of the dashboard
+   - Layout: HeadlineStat → Metric cards row → Energy chart → Pie chart
+
+9. Final styling pass:
+   - Ensure consistent dark theme
+   - Ensure charts have dark backgrounds with light text
+   - Verify responsive behavior
+   - Add subtle transitions/animations
+
+10. **Demo script dry run** — execute the exact 5-query demo from the spec:
+    - Query 1: "What is photosynthesis?" → 🟢 Small Model. Dashboard: 1 query, 0 cache hits.
+    - Query 2: "Explain photosynthesis to me" → ⚡ Cache Hit. Dashboard: 2 queries, 1 cache hit, energy saved ticks up.
+    - Query 3: "Write a Python function to parse a CSV and compute rolling averages" → 🔵 Large Model. Dashboard: 3 queries, 1 cache hit, 1 small + 1 large.
+    - Query 4: Same as query 3 → ⚡ Cache Hit. Dashboard: 4 queries, 2 cache hits.
+    - Query 5: (bonus) Any new simple query to show the system still works.
+    - Verify: Headline stat reads "2 LLM calls avoided, saving ~0.01 kWh / 0.004 kg CO2" (approximately).
+    - Verify: Line chart shows upward trend. Pie chart shows distribution.
+
+### Acceptance Criteria
+
+- [ ] Animated number counters on metric cards
+- [ ] Line chart renders and updates with each query
+- [ ] Pie chart shows correct distribution with matching badge colors
+- [ ] Headline stat prominently displays savings
+- [ ] Full demo script (5 queries) runs end-to-end
+- [ ] Cache hits are visibly instant vs model calls
+- [ ] Dashboard updates in real time after each query
+- [ ] Green/blue/yellow badge colors are consistent between chat and pie chart
+- [ ] `npm run build` succeeds
+- [ ] App looks polished and demo-ready
+
+### Verification Commands
+
+```bash
+cd /Users/dyl/shiftH/ecoprompt && npm run build
+# Run full demo script manually — this IS the exit criterion
+```
+
+### Exit Criterion (Project-Level)
+
+The 5-query demo script from `EcoPrompt_Project_Spec.md` Section "Demo Script" runs end-to-end:
+1. Simple query → Small Model badge + dashboard update
+2. Similar query → Cache Hit badge + energy saved counter increases
+3. Complex query → Large Model badge + dashboard update
+4. Repeat complex query → Cache Hit badge + energy saved increases
+5. Dashboard headline shows correct cumulative savings
+6. Line chart trends upward, pie chart reflects distribution
+
+---
+
+## Dependency Graph
+
+```
+Phase 1 (Scaffold)
+    │
+    ▼
+Phase 2 (Bedrock LLM)
+    │
+    ▼
+Phase 3 (Dedup)  ← strongest model recommended
+    │
+    ▼
+Phase 4 (Routing)
+    │
+    ▼
+Phase 5 (Metrics)
+    │
+    ▼
+Phase 6 (Polish)
+```
+
+All phases are serial — each depends on the previous. No parallel execution opportunities because each phase builds directly on the prior phase's code.
+
+---
+
+## Risk Register
+
+| Risk | Mitigation |
+|---|---|
+| AWS credentials not configured | Phase 2 blocks until `.env.local` has valid Bedrock creds. Confirm before starting |
+| Supabase pgvector extension not enabled | Phase 3 blocks until SQL setup is run. Provide exact SQL commands |
+| Titan Embeddings dimension mismatch | Spec says 1024 dims. Verify in Phase 3 by logging first embedding length |
+| Cosine similarity threshold too strict/loose | Default 0.92 from spec. Tune in Phase 6 if needed. Log similarity scores to debug |
+| Recharts SSR issues in Next.js | Use `"use client"` directive on all chart components. Dynamic import with `ssr: false` if needed |
+| Bedrock model ID changes | Pin exact model IDs in `classifier.ts` constants. Update if API errors |
+| Rate limiting on Bedrock | Unlikely for hackathon volume. If hit, add basic retry with backoff |
+
+---
+
+## Executor Notes
+
+- **Hackathon speed**: Skip error handling, skip tests, skip loading states beyond basics. Optimize for "it works in the demo."
+- **All work in `ecoprompt/` subdirectory**: The repo root has spec files; the Next.js app lives in `ecoprompt/`.
+- **Commit after each phase**: Push to `main` on the remote after each phase passes verification.
+- **Supabase setup**: Phases 3 and 5 require SQL to be run in Supabase. The executor should do this via the Supabase MCP or SQL editor.
+- **`.env.local`**: Never commit this file. Use `.env.local.example` as a template.
