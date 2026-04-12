@@ -1,5 +1,7 @@
 import MetricsCounter from "./MetricsCounter";
 import ModelDistribution from "./ModelDistribution";
+import EnergyChart from "./EnergyChart";
+import HeadlineStat from "./HeadlineStat";
 import QueryLog from "./QueryLog";
 import type { DashboardMetrics } from "@/lib/types";
 
@@ -28,6 +30,13 @@ export default function DashboardPanel({ metrics }: DashboardPanelProps) {
       </div>
 
       <div className="px-5 py-4 flex flex-col gap-5">
+        {/* Headline stat — prominent */}
+        <HeadlineStat
+          callsAvoided={cacheHits}
+          energySaved={energySaved}
+          co2Saved={co2Saved}
+        />
+
         {/* Stat cards grid */}
         <div className="grid grid-cols-2 gap-3">
           <MetricsCounter
@@ -55,7 +64,12 @@ export default function DashboardPanel({ metrics }: DashboardPanelProps) {
           />
         </div>
 
-        {/* Model Distribution */}
+        {/* Energy chart — line chart */}
+        <div className="bg-surface rounded-lg border border-border-standard p-4">
+          <EnergyChart timeline={m?.timeline ?? []} />
+        </div>
+
+        {/* Model Distribution — horizontal bars */}
         <div className="bg-surface rounded-lg border border-border-standard p-4">
           <ModelDistribution
             cacheHits={m?.distribution.cache_hits ?? 0}
@@ -65,13 +79,13 @@ export default function DashboardPanel({ metrics }: DashboardPanelProps) {
           />
         </div>
 
-        {/* Headline stat */}
+        {/* Scale projection */}
         <div className="bg-surface rounded-lg border border-border-standard p-4">
-          <p className="text-sm text-green leading-relaxed">
-            {cacheHits} LLM call{cacheHits !== 1 ? "s" : ""} avoided — saving ~{energySaved.toFixed(4)} kWh and {co2Saved.toFixed(4)} kg CO₂.
-          </p>
-          <p className="text-xs text-text-secondary mt-2 leading-relaxed">
-            At 1M queries/day with this hit rate: {projectedAvoided.toLocaleString()} server calls never happen.
+          <p className="text-xs text-text-secondary leading-relaxed">
+            At 1M queries/day with this hit rate:{" "}
+            <span className="text-green font-medium">
+              {projectedAvoided.toLocaleString()} server calls never happen.
+            </span>
           </p>
         </div>
 

@@ -8,9 +8,9 @@ type ModelDistributionProps = {
 export default function ModelDistribution({ cacheHits, smallModel, largeModel, total }: ModelDistributionProps) {
   const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
   const items = [
-    { label: "Cache hit", percentage: pct(cacheHits), color: "bg-green" },
-    { label: "Small", percentage: pct(smallModel), color: "bg-blue-500" },
-    { label: "Large", percentage: pct(largeModel), color: "bg-purple-500" },
+    { label: "Cache hit", percentage: pct(cacheHits), color: "bg-amber-400" },
+    { label: "Small", percentage: pct(smallModel), color: "bg-green" },
+    { label: "Large", percentage: pct(largeModel), color: "bg-blue-400" },
   ];
   return (
     <div className="flex flex-col gap-3">
