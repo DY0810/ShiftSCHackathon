@@ -28,14 +28,11 @@ export default function AppPage() {
     }
   }, [messages, hydrated]);
 
-  const apiHeaders = { "x-api-key": process.env.NEXT_PUBLIC_API_KEY ?? "" };
-
   const refreshMetrics = useCallback(async () => {
-    const res = await fetch("/api/metrics", { headers: apiHeaders });
+    const res = await fetch("/api/metrics");
     if (res.ok) {
       setMetrics(await res.json());
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const [resetting, setResetting] = useState(false);
@@ -53,7 +50,7 @@ export default function AppPage() {
     sessionStorage.removeItem(MESSAGES_KEY);
     setMetrics(null);
     try {
-      await fetch("/api/reset", { method: "POST", headers: apiHeaders });
+      await fetch("/api/reset", { method: "POST" });
     } finally {
       setResetting(false);
     }

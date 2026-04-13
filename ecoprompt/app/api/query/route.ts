@@ -4,16 +4,16 @@ import { classifyComplexity, MODEL_IDS } from "@/lib/classifier";
 import { deduplicate } from "@/lib/dedup";
 import { storeEntry } from "@/lib/vectorStore";
 import { estimateEnergy, logMetric } from "@/lib/metrics";
-import { isRateLimited } from "@/lib/rateLimit";
+import { isRateLimited, extractClientIp } from "@/lib/rateLimit";
 
 export const maxDuration = 60;
 
 const MAX_PROMPT_LENGTH = 5000;
 
 export async function POST(request: Request) {
-  // Rate limit by IP
-  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
-  if (isRateLimited(ip)) {
+  // Rate limit by IP (uses last x-forwarded-for value, which Vercel appends)
+  const ip = extractClientIp(request);
+  if (await isRateLimited(ip)) {
     return NextResponse.json(
       { error: "Too many requests. Please slow down." },
       { status: 429 }
