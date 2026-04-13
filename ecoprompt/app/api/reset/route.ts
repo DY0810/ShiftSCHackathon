@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { docClient } from "@/lib/dynamodb";
 import { ScanCommand, DeleteCommand } from "@aws-sdk/lib-dynamodb";
+import { isRateLimited, extractClientIp } from "@/lib/rateLimit";
 
 const TABLES = ["ecoprompt-query-cache", "ecoprompt-query-metrics"];
 
@@ -21,7 +22,15 @@ async function clearTable(tableName: string) {
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  const ip = extractClientIp(request);
+  if (await isRateLimited(ip)) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429 }
+    );
+  }
+
   let totalDeleted = 0;
   for (const table of TABLES) {
     totalDeleted += await clearTable(table);
