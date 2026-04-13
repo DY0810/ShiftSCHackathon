@@ -3,7 +3,8 @@
  * Persists across Vercel serverless cold starts.
  */
 
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
 import { docClient, ensureTable } from "./dynamodb";
 
 const TABLE_NAME = "ecoprompt-rate-limits";
@@ -36,7 +37,8 @@ export function extractClientIp(request: Request): string {
 
 /**
  * Check if an IP is rate-limited. Returns true if the request should be blocked.
- * Uses DynamoDB atomic counters with TTL-based windows.
+ * Uses DynamoDB atomic ADD (single operation, no race condition).
+ * Fails CLOSED — if DynamoDB is unreachable, requests are blocked.
  */
 export async function isRateLimited(ip: string): Promise<boolean> {
   await ensureRateLimitTable();
@@ -47,28 +49,26 @@ export async function isRateLimited(ip: string): Promise<boolean> {
   const ttl = (windowKey + 1) * WINDOW_SECONDS + 60; // expire 60s after window ends
 
   try {
-    const existing = await docClient.send(
-      new GetCommand({ TableName: TABLE_NAME, Key: { id } })
-    );
-
-    const currentCount = (existing.Item?.count as number) ?? 0;
-
-    if (currentCount >= MAX_REQUESTS) {
-      return true;
-    }
-
+    // Atomic increment with condition check — no race condition
     await docClient.send(
-      new PutCommand({
+      new UpdateCommand({
         TableName: TABLE_NAME,
-        Item: { id, count: currentCount + 1, ttl },
+        Key: { id },
+        UpdateExpression: "ADD #count :inc SET #ttl = if_not_exists(#ttl, :ttl)",
+        ConditionExpression:
+          "attribute_not_exists(#count) OR #count < :max",
+        ExpressionAttributeNames: { "#count": "count", "#ttl": "ttl" },
+        ExpressionAttributeValues: { ":inc": 1, ":ttl": ttl, ":max": MAX_REQUESTS },
       })
     );
-
     return false;
   } catch (err) {
-    // If DynamoDB is unreachable, fail open to avoid breaking the app
-    // but log the error for monitoring
-    console.error("Rate limiter error:", err);
-    return false;
+    if (err instanceof ConditionalCheckFailedException) {
+      // count >= MAX_REQUESTS — rate limited
+      return true;
+    }
+    // DynamoDB unreachable — fail closed to protect AWS bill
+    console.error("Rate limiter error:", (err as Error).message);
+    return true;
   }
 }

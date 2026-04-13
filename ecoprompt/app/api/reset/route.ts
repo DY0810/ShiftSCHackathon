@@ -23,6 +23,22 @@ async function clearTable(tableName: string) {
 }
 
 export async function POST(request: Request) {
+  // Require API key for destructive operations (not just same-origin)
+  const apiKey = process.env.API_SECRET_KEY;
+  const provided = request.headers.get("x-api-key");
+  if (!apiKey || provided !== apiKey) {
+    // Allow same-origin browser requests by checking referer
+    const referer = request.headers.get("referer");
+    const host = request.headers.get("host");
+    const isSameOrigin =
+      host &&
+      (referer?.startsWith(`https://${host}`) ||
+        referer?.startsWith(`http://${host}`));
+    if (!isSameOrigin) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
+
   const ip = extractClientIp(request);
   if (await isRateLimited(ip)) {
     return NextResponse.json(

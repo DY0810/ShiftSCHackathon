@@ -13,10 +13,19 @@ const client = new BedrockRuntimeClient({
 
 const DEFAULT_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0";
 
+const ALLOWED_MODELS = new Set([
+  "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+]);
+
 export async function invokeModel(
   prompt: string,
   modelId: string = DEFAULT_MODEL_ID
 ): Promise<string> {
+  if (!ALLOWED_MODELS.has(modelId)) {
+    throw new Error("Invalid model ID");
+  }
+
   const body = JSON.stringify({
     anthropic_version: "bedrock-2023-05-31",
     max_tokens: 1024,
