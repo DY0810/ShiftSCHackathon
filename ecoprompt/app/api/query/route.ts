@@ -4,14 +4,33 @@ import { classifyComplexity, MODEL_IDS } from "@/lib/classifier";
 import { deduplicate } from "@/lib/dedup";
 import { storeEntry } from "@/lib/vectorStore";
 import { estimateEnergy, logMetric } from "@/lib/metrics";
+import { isRateLimited } from "@/lib/rateLimit";
 
 export const maxDuration = 60;
 
+const MAX_PROMPT_LENGTH = 5000;
+
 export async function POST(request: Request) {
+  // Rate limit by IP
+  const ip = request.headers.get("x-forwarded-for") ?? "unknown";
+  if (isRateLimited(ip)) {
+    return NextResponse.json(
+      { error: "Too many requests. Please slow down." },
+      { status: 429 }
+    );
+  }
+
   const { prompt } = await request.json();
 
   if (!prompt || typeof prompt !== "string") {
     return NextResponse.json({ error: "prompt is required" }, { status: 400 });
+  }
+
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    return NextResponse.json(
+      { error: `Prompt too long (max ${MAX_PROMPT_LENGTH} characters)` },
+      { status: 400 }
+    );
   }
 
   const start = Date.now();
@@ -71,8 +90,9 @@ export async function POST(request: Request) {
     });
   } catch (error: unknown) {
     console.error("Query error:", error);
-    const message =
-      error instanceof Error ? error.message : "Failed to process query";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: "An error occurred. Please try again." },
+      { status: 500 }
+    );
   }
 }

@@ -32,7 +32,10 @@ export default function ChatPanel({ messages, setMessages, onQueryComplete }: Ch
     try {
       const res = await fetch("/api/query", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": process.env.NEXT_PUBLIC_API_KEY ?? "",
+        },
         body: JSON.stringify({ prompt }),
       });
 
