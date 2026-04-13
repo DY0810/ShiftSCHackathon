@@ -33,7 +33,7 @@ export async function searchSimilar(
   await ensureCacheTable();
 
   const result = await docClient.send(
-    new ScanCommand({ TableName: QUERY_CACHE_TABLE })
+    new ScanCommand({ TableName: QUERY_CACHE_TABLE, Limit: 500 })
   );
 
   if (!result.Items || result.Items.length === 0) return { hit: false };
